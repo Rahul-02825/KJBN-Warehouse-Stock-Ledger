@@ -39,9 +39,15 @@ func routerWithoutDB() http.Handler {
 	return api.NewRouter(sqlc.New(nil))
 }
 
-// routerWithDB connects to TEST_DATABASE_URL and empties all tables first.
-// The test is skipped when the variable is not set.
+// routerWithDB returns the full router on an emptied test database.
 func routerWithDB(t *testing.T) http.Handler {
+	t.Helper()
+	return api.NewRouter(sqlc.New(testDB(t)))
+}
+
+// testDB connects to TEST_DATABASE_URL and empties all tables first.
+// The test is skipped when the variable is not set.
+func testDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
@@ -62,5 +68,5 @@ func routerWithDB(t *testing.T) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return api.NewRouter(sqlc.New(pool))
+	return pool
 }

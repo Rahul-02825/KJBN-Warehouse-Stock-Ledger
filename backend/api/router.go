@@ -11,5 +11,6 @@ func NewRouter(q *sqlc.Queries) http.Handler {
 	mux := http.NewServeMux()
 	NewProductHandler(q).Register(mux)
 	NewLocationHandler(q).Register(mux)
+	NewInventoryHandler(q).Register(mux)
 	return Logger(Recover(mux))
 }
