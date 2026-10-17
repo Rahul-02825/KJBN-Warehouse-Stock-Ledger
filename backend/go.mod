@@ -2,7 +2,10 @@ module github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend
 
 go 1.26
 
-require github.com/jackc/pgx/v5 v5.11.0
+require (
+	github.com/jackc/pgx/v5 v5.11.0
+	github.com/shopspring/decimal v1.5.0
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect

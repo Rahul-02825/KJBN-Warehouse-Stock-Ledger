@@ -226,7 +226,7 @@ type GetMovementDetailRow struct {
 	FromLocationCode pgtype.Text        `json:"from_location_code"`
 	ToLocationCode   pgtype.Text        `json:"to_location_code"`
 	ReversedByID     pgtype.Int8        `json:"reversed_by_id"`
-	IsReversed       pgtype.Bool        `json:"is_reversed"`
+	IsReversed       interface{}        `json:"is_reversed"`
 }
 
 // Single movement with display names and reversal status.
@@ -500,8 +500,8 @@ type ListMovementHistoryParams struct {
 	Reference    pgtype.Text        `json:"reference"`
 	FromDate     pgtype.Timestamptz `json:"from_date"`
 	ToDate       pgtype.Timestamptz `json:"to_date"`
-	PageOffset   int64              `json:"page_offset"`
-	PageSize     int64              `json:"page_size"`
+	PageOffset   int32              `json:"page_offset"`
+	PageSize     int32              `json:"page_size"`
 }
 
 type ListMovementHistoryRow struct {
@@ -524,7 +524,7 @@ type ListMovementHistoryRow struct {
 	FromLocationCode pgtype.Text        `json:"from_location_code"`
 	ToLocationCode   pgtype.Text        `json:"to_location_code"`
 	ReversedByID     pgtype.Int8        `json:"reversed_by_id"`
-	IsReversed       pgtype.Bool        `json:"is_reversed"`
+	IsReversed       interface{}        `json:"is_reversed"`
 }
 
 // History with optional filters and offset pagination.
