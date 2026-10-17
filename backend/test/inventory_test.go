@@ -1,29 +1,26 @@
 package test
 
 import (
-	"context"
 	"net/http"
 	"testing"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/api"
-	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
 // Integration test for the read-only inventory endpoints.
 func TestInventoryBalances(t *testing.T) {
-	pool := testDB(t)
-	h := api.NewRouter(sqlc.New(pool))
+	h := api.NewRouter(testDB(t))
 
-	send(t, h, "POST", "/api/products", `{"sku":"RICE-25","name":"Rice","unit":"pcs"}`)
-	send(t, h, "POST", "/api/products", `{"sku":"DAL","name":"Dal","unit":"kg"}`)
-	send(t, h, "POST", "/api/locations", `{"code":"A-01"}`)
-	send(t, h, "POST", "/api/locations", `{"code":"B-01"}`)
-
-	// No movements API yet, so put stock straight into the cache for this read test.
-	_, err := pool.Exec(context.Background(),
-		`INSERT INTO stock_balances (product_id, location_id, quantity) VALUES (1, 1, 30), (1, 2, 20), (2, 1, 12.5)`)
-	if err != nil {
-		t.Fatal(err)
+	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"RICE-25","name":"Rice","unit":"pcs"}`)
+	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"DAL","name":"Dal","unit":"kg"}`)
+	mustSend(t, h, 201, "POST", "/api/locations", `{"code":"A-01"}`)
+	mustSend(t, h, 201, "POST", "/api/locations", `{"code":"B-01"}`)
+	for _, body := range []string{
+		`{"product_id":1,"location_id":1,"quantity":"30","unit_cost":"10","created_by":"test"}`,
+		`{"product_id":1,"location_id":2,"quantity":"20","unit_cost":"10","created_by":"test"}`,
+		`{"product_id":2,"location_id":1,"quantity":"12.5","unit_cost":"4","created_by":"test"}`,
+	} {
+		mustSend(t, h, 201, "POST", "/api/movements/in", body)
 	}
 
 	t.Run("grid has every product x location", func(t *testing.T) {

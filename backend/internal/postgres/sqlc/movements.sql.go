@@ -197,7 +197,7 @@ SELECT
     fl.code AS from_location_code,
     tl.code AS to_location_code,
     rev.id  AS reversed_by_id,
-    (rev.id IS NOT NULL) AS is_reversed
+    (rev.id IS NOT NULL)::BOOLEAN AS is_reversed
 FROM movements m
 JOIN products p ON p.id = m.product_id
 LEFT JOIN locations fl ON fl.id = m.from_location_id
@@ -226,7 +226,7 @@ type GetMovementDetailRow struct {
 	FromLocationCode pgtype.Text        `json:"from_location_code"`
 	ToLocationCode   pgtype.Text        `json:"to_location_code"`
 	ReversedByID     pgtype.Int8        `json:"reversed_by_id"`
-	IsReversed       interface{}        `json:"is_reversed"`
+	IsReversed       bool               `json:"is_reversed"`
 }
 
 // Single movement with display names and reversal status.
@@ -469,7 +469,7 @@ SELECT
     fl.code AS from_location_code,
     tl.code AS to_location_code,
     rev.id  AS reversed_by_id,
-    (rev.id IS NOT NULL) AS is_reversed
+    (rev.id IS NOT NULL)::BOOLEAN AS is_reversed
 FROM movements m
 JOIN products p ON p.id = m.product_id
 LEFT JOIN locations fl ON fl.id = m.from_location_id
@@ -524,7 +524,7 @@ type ListMovementHistoryRow struct {
 	FromLocationCode pgtype.Text        `json:"from_location_code"`
 	ToLocationCode   pgtype.Text        `json:"to_location_code"`
 	ReversedByID     pgtype.Int8        `json:"reversed_by_id"`
-	IsReversed       interface{}        `json:"is_reversed"`
+	IsReversed       bool               `json:"is_reversed"`
 }
 
 // History with optional filters and offset pagination.
