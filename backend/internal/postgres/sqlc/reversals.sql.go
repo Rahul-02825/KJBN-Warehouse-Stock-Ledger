@@ -21,17 +21,17 @@ INSERT INTO movement_entries (
 )
 SELECT
     $1,
-    product_id,
-    location_id,
-    -quantity_delta,
-    unit_cost
-FROM movement_entries
-WHERE movement_id = $2
+    src.product_id,
+    src.location_id,
+    -src.quantity_delta,
+    src.unit_cost
+FROM movement_entries src
+WHERE src.movement_id = $2
 `
 
 type CreateReversalEntriesParams struct {
-	ReversalMovementID pgtype.Int8 `json:"reversal_movement_id"`
-	OriginalMovementID pgtype.Int8 `json:"original_movement_id"`
+	ReversalMovementID int64 `json:"reversal_movement_id"`
+	OriginalMovementID int64 `json:"original_movement_id"`
 }
 
 // Writes the exact inverse of the original's entries under the new movement.

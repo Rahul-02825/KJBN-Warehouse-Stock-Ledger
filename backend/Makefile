@@ -65,3 +65,21 @@ sqlc-generate:
 	@sqlc generate && echo "generated internal/postgres/sqlc"
 
 sqlc: schema-snapshot sqlc-vet sqlc-generate
+
+.PHONY: seed run build test cover
+seed:
+	$(call with_env,go run ./cmd/seed)
+
+run:
+	$(call with_env,go run ./cmd/api)
+
+build:
+	@go build ./... && echo "build ok"
+
+# Loads .env so TEST_DATABASE_URL is picked up; integration tests skip when it is unset.
+test:
+	@set -a; [ -f $(ENV_FILE) ] && source $(ENV_FILE); set +a; go test -race ./test/...
+
+cover:
+	@set -a; [ -f $(ENV_FILE) ] && source $(ENV_FILE); set +a; \
+	go test -race -coverpkg=./api/... -coverprofile=coverage.out ./test/... && go tool cover -func=coverage.out | tail -1
