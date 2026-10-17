@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+
+.DS_Store
+coverage.out
+coverage.html
+
+node_modules/
+dist/
+build/
+
+backend/bin/
