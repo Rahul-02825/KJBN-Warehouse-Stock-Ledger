@@ -43,7 +43,7 @@ SELECT
     fl.code AS from_location_code,
     tl.code AS to_location_code,
     rev.id  AS reversed_by_id,
-    (rev.id IS NOT NULL) AS is_reversed
+    (rev.id IS NOT NULL)::BOOLEAN AS is_reversed
 FROM movements m
 JOIN products p ON p.id = m.product_id
 LEFT JOIN locations fl ON fl.id = m.from_location_id
@@ -68,7 +68,7 @@ SELECT
     fl.code AS from_location_code,
     tl.code AS to_location_code,
     rev.id  AS reversed_by_id,
-    (rev.id IS NOT NULL) AS is_reversed
+    (rev.id IS NOT NULL)::BOOLEAN AS is_reversed
 FROM movements m
 JOIN products p ON p.id = m.product_id
 LEFT JOIN locations fl ON fl.id = m.from_location_id

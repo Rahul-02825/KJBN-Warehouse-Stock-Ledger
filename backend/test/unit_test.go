@@ -47,3 +47,70 @@ func TestCheckReorderLevel(t *testing.T) {
 		}
 	}
 }
+
+func TestWeightedAverage(t *testing.T) {
+	d := decimal.RequireFromString
+	tests := []struct {
+		name                      string
+		oldQty, oldAvg, qty, cost string
+		want                      string
+	}{
+		{"first receipt takes its own cost", "0", "0", "50", "1000", "1000"},
+		{"two equal lots", "50", "1000", "50", "1200", "1100"},
+		{"unequal lots", "6", "100", "10", "200", "162.5"},
+		{"rounds to 4 decimals", "2", "10", "1", "11", "10.3333"},
+	}
+	for _, tt := range tests {
+		got := api.WeightedAverage(d(tt.oldQty), d(tt.oldAvg), d(tt.qty), d(tt.cost))
+		if !got.Equal(d(tt.want)) {
+			t.Errorf("%s: got %s, want %s", tt.name, got, tt.want)
+		}
+	}
+}
+
+// The average is stored with 4 decimals, so each receipt can add up to 0.00005 of
+// rounding error. Over 1000 receipts the measured drift is about 0.00013 rupee;
+// the test allows 0.001 rupee (a tenth of a paisa).
+func TestWeightedAverage_RoundingAfterManyReceipts(t *testing.T) {
+	avg, qty := decimal.Zero, decimal.Zero
+	totalValue := decimal.Zero
+	for i := 1; i <= 1000; i++ {
+		lot := decimal.NewFromInt(int64(i%7 + 1))
+		cost := decimal.NewFromInt(int64(i%13 + 1)).Div(decimal.NewFromInt(3)).Round(4)
+		avg = api.WeightedAverage(qty, avg, lot, cost)
+		qty = qty.Add(lot)
+		totalValue = totalValue.Add(lot.Mul(cost))
+	}
+	exact := totalValue.DivRound(qty, 10)
+	if diff := avg.Sub(exact).Abs(); diff.GreaterThan(decimal.RequireFromString("0.001")) {
+		t.Fatalf("average drifted: rounded %s, exact %s, diff %s", avg, exact, diff)
+	}
+}
+
+func TestValidateQuantity(t *testing.T) {
+	ok := []string{"1", "0.0001", "1000000000"}
+	bad := []string{"0", "-1", "0.00001", "1000000000.0001"}
+	for _, s := range ok {
+		if msg := api.ValidateQuantity(decimal.RequireFromString(s)); msg != "" {
+			t.Errorf("%s should be valid, got %q", s, msg)
+		}
+	}
+	for _, s := range bad {
+		if api.ValidateQuantity(decimal.RequireFromString(s)) == "" {
+			t.Errorf("%s should be invalid", s)
+		}
+	}
+}
+
+func TestValidReason(t *testing.T) {
+	for _, r := range []string{"damaged", "expired", "count_correction", "theft", "other"} {
+		if !api.ValidReason(r) {
+			t.Errorf("%q should be valid", r)
+		}
+	}
+	for _, r := range []string{"", "lost", "Damaged", "count correction"} {
+		if api.ValidReason(r) {
+			t.Errorf("%q should be invalid", r)
+		}
+	}
+}
