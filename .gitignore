@@ -11,3 +11,5 @@ dist/
 build/
 
 backend/bin/
+
+CLAUDE.md
