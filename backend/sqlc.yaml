@@ -2,10 +2,22 @@ version: "2"
 
 sql:
   - engine: "postgresql"
+    # Snapshot built from db/migrations/*.up.sql (scripts/schema-snapshot.sh).
+    # sqlc reads the snapshot, not the migrations directory, so *.down.sql
+    # files are never parsed as duplicate schema definitions.
     schema: "db/schema/schema.sql"
     queries: "db/queries/"
+    # Used only by `sqlc vet` to prepare every query against a live database.
+    database:
+      uri: "${DATABASE_URL}"
+    rules:
+      - sqlc/db-prepare
     gen:
       go:
-        package: "db"
-        out: "internal/db"
+        package: "sqlc"
+        out: "internal/postgres/sqlc"
         sql_package: "pgx/v5"
+        emit_interface: true
+        emit_empty_slices: true
+        emit_json_tags: true
+        json_tags_case_style: "snake"
