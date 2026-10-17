@@ -65,3 +65,13 @@ sqlc-generate:
 	@sqlc generate && echo "generated internal/postgres/sqlc"
 
 sqlc: schema-snapshot sqlc-vet sqlc-generate
+
+.PHONY: seed test build
+seed:
+	$(call with_env,go run ./cmd/seed)
+
+build:
+	@go build ./... && echo "build ok"
+
+test:
+	@go test ./...
