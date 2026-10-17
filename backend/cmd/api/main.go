@@ -39,13 +39,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	queries := sqlc.New(pool)
-	mux := http.NewServeMux()
-	api.NewProductHandler(queries).Register(mux)
-
 	srv := &http.Server{
 		Addr:         ":" + port,
-		Handler:      api.Logger(api.Recover(mux)),
+		Handler:      api.NewRouter(sqlc.New(pool)),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}

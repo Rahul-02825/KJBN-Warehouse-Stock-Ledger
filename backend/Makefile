@@ -78,8 +78,8 @@ build:
 
 # Loads .env so TEST_DATABASE_URL is picked up; integration tests skip when it is unset.
 test:
-	@set -a; [ -f $(ENV_FILE) ] && source $(ENV_FILE); set +a; go test -race ./...
+	@set -a; [ -f $(ENV_FILE) ] && source $(ENV_FILE); set +a; go test -race ./test/...
 
 cover:
 	@set -a; [ -f $(ENV_FILE) ] && source $(ENV_FILE); set +a; \
-	go test -race -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | tail -1
+	go test -race -coverpkg=./api/... -coverprofile=coverage.out ./test/... && go tool cover -func=coverage.out | tail -1

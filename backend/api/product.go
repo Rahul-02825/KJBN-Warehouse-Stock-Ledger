@@ -80,10 +80,10 @@ func (h *ProductHandler) create(w http.ResponseWriter, r *http.Request) {
 	if req.Name == "" || len(req.Name) > 200 {
 		fields["name"] = "is required, max 200 characters"
 	}
-	if !validUnit(req.Unit) {
+	if !ValidUnit(req.Unit) {
 		fields["unit"] = "must be one of pcs, kg, litre"
 	}
-	if msg := checkReorderLevel(req.ReorderLevel, req.Unit); msg != "" {
+	if msg := CheckReorderLevel(req.ReorderLevel, req.Unit); msg != "" {
 		fields["reorder_level"] = msg
 	}
 	if len(fields) > 0 {
@@ -203,7 +203,7 @@ func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request) {
 		params.Name = pgtype.Text{String: name, Valid: true}
 	}
 	if req.ReorderLevel != nil {
-		if msg := checkReorderLevel(*req.ReorderLevel, current.Unit); msg != "" {
+		if msg := CheckReorderLevel(*req.ReorderLevel, current.Unit); msg != "" {
 			fields["reorder_level"] = msg
 		}
 		params.ReorderLevel = toNumeric(*req.ReorderLevel)
@@ -221,11 +221,11 @@ func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toProductResponse(product))
 }
 
-func validUnit(u string) bool {
+func ValidUnit(u string) bool {
 	return u == "pcs" || u == "kg" || u == "litre"
 }
 
-func checkReorderLevel(d decimal.Decimal, unit string) string {
+func CheckReorderLevel(d decimal.Decimal, unit string) string {
 	if d.IsNegative() {
 		return "must not be negative"
 	}
