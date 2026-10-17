@@ -117,8 +117,8 @@ OFFSET $2
 
 type ListProductsParams struct {
 	Search     pgtype.Text `json:"search"`
-	PageOffset int64       `json:"page_offset"`
-	PageSize   int64       `json:"page_size"`
+	PageOffset int32       `json:"page_offset"`
+	PageSize   int32       `json:"page_size"`
 }
 
 func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error) {

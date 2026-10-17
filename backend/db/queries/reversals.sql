@@ -36,9 +36,9 @@ INSERT INTO movement_entries (
 )
 SELECT
     sqlc.arg('reversal_movement_id'),
-    product_id,
-    location_id,
-    -quantity_delta,
-    unit_cost
-FROM movement_entries
-WHERE movement_id = sqlc.arg('original_movement_id');
+    src.product_id,
+    src.location_id,
+    -src.quantity_delta,
+    src.unit_cost
+FROM movement_entries src
+WHERE src.movement_id = sqlc.arg('original_movement_id');

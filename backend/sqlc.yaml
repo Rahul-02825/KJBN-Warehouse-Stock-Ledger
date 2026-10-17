@@ -12,6 +12,9 @@ sql:
       uri: "${DATABASE_URL}"
     rules:
       - sqlc/db-prepare
+    # generate/diff stay offline; only `sqlc vet` connects.
+    analyzer:
+      database: false
     gen:
       go:
         package: "sqlc"
