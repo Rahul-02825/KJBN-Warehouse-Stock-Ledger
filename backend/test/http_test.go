@@ -70,3 +70,18 @@ func TestRecoverMiddleware(t *testing.T) {
 		t.Fatalf("status = %d, want 500", rec.Code)
 	}
 }
+
+func TestInventory_BadIDs(t *testing.T) {
+	paths := []string{
+		"/api/inventory/abc/1",
+		"/api/inventory/1/0",
+		"/api/products/x/balances",
+		"/api/locations/-1/balances",
+	}
+	for _, p := range paths {
+		status, body := send(t, routerWithoutDB(), "GET", p, "")
+		if status != http.StatusBadRequest || errorCode(body) != "BAD_REQUEST" {
+			t.Errorf("%s: got %d %q, want 400 BAD_REQUEST", p, status, errorCode(body))
+		}
+	}
+}
