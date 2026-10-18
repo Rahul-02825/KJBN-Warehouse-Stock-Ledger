@@ -65,3 +65,9 @@ jobs:
 
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1
+
+      - name: Load test against a running server
+        run: |
+          DATABASE_URL="$TEST_DATABASE_URL" PORT=8080 go run ./cmd/api > api.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:8080/healthz && break; sleep 1; done
+          go run ./cmd/loadtest -url http://localhost:8080 || (cat api.log && exit 1)

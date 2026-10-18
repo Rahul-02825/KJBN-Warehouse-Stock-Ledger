@@ -66,7 +66,7 @@ sqlc-generate:
 
 sqlc: schema-snapshot sqlc-vet sqlc-generate
 
-.PHONY: seed run build test cover
+.PHONY: seed run build test cover load-test
 seed:
 	$(call with_env,go run ./cmd/seed)
 
@@ -83,3 +83,8 @@ test:
 cover:
 	@set -a; [ -f $(ENV_FILE) ] && source $(ENV_FILE); set +a; \
 	go test -race -coverpkg=./api/... -coverprofile=coverage.out ./test/... && go tool cover -func=coverage.out | tail -1
+
+# Fires concurrent requests at a running API (make run first). Writes test data.
+URL ?= http://localhost:8080
+load-test:
+	go run ./cmd/loadtest -url $(URL)
