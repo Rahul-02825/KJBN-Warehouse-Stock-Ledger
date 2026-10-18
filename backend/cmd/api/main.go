@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/api"
-	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
 func main() {
@@ -41,7 +40,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         ":" + port,
-		Handler:      api.NewRouter(sqlc.New(pool)),
+		Handler:      api.NewRouter(pool),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}

@@ -11,38 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createReversalEntries = `-- name: CreateReversalEntries :execrows
-INSERT INTO movement_entries (
-    movement_id,
-    product_id,
-    location_id,
-    quantity_delta,
-    unit_cost
-)
-SELECT
-    $1,
-    src.product_id,
-    src.location_id,
-    -src.quantity_delta,
-    src.unit_cost
-FROM movement_entries src
-WHERE src.movement_id = $2
-`
-
-type CreateReversalEntriesParams struct {
-	ReversalMovementID int64 `json:"reversal_movement_id"`
-	OriginalMovementID int64 `json:"original_movement_id"`
-}
-
-// Writes the exact inverse of the original's entries under the new movement.
-func (q *Queries) CreateReversalEntries(ctx context.Context, arg CreateReversalEntriesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, createReversalEntries, arg.ReversalMovementID, arg.OriginalMovementID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const getEntriesForReversal = `-- name: GetEntriesForReversal :many
 SELECT
     id,

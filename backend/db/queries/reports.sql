@@ -29,11 +29,6 @@ LEFT JOIN stock_balances sb ON sb.product_id = p.id
 GROUP BY p.id
 ORDER BY p.name, p.id;
 
--- name: GetTotalInventoryValue :one
-SELECT COALESCE(SUM(sb.quantity * p.average_cost), 0)::NUMERIC(24, 4) AS total_value
-FROM stock_balances sb
-JOIN products p ON p.id = sb.product_id;
-
 -- Reconciliation: recompute every (product, location) balance from the ledger
 -- and compare with the cache. Covers cells present on either side. Read-only.
 -- name: ListReconciliation :many
