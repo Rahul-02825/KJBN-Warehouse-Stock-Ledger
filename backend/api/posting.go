@@ -49,44 +49,6 @@ func (e notReversibleError) Error() string { return e.reason }
 
 var errAlreadyReversed = errors.New("movement has already been reversed")
 
-type InInput struct {
-	ProductID, LocationID int64
-	Quantity, UnitCost    decimal.Decimal
-	Reference, CreatedBy  string
-}
-
-type OutInput struct {
-	ProductID, LocationID int64
-	Quantity              decimal.Decimal
-	Reference, CreatedBy  string
-}
-
-type TransferInput struct {
-	ProductID, FromLocationID, ToLocationID int64
-	Quantity                                decimal.Decimal
-	Reference, CreatedBy                    string
-}
-
-// AdjustmentInput.Quantity is signed: positive adds stock, negative removes it.
-type AdjustmentInput struct {
-	ProductID, LocationID              int64
-	Quantity                           decimal.Decimal
-	Reason, Note, Reference, CreatedBy string
-}
-
-type ReversalInput struct {
-	MovementID      int64
-	Note, CreatedBy string
-}
-
-type Ledger struct {
-	pool *pgxpool.Pool
-}
-
-func NewLedger(pool *pgxpool.Pool) *Ledger {
-	return &Ledger{pool: pool}
-}
-
 // WeightedAverage returns the new average cost after receiving qty at cost.
 func WeightedAverage(oldQty, oldAvg, qty, cost decimal.Decimal) decimal.Decimal {
 	if !oldQty.IsPositive() {
@@ -111,36 +73,42 @@ func ValidateQuantity(d decimal.Decimal) string {
 
 func ValidReason(r string) bool { return adjustmentReasons[r] }
 
-func (l *Ledger) PostIn(ctx context.Context, in InInput) (sqlc.Movement, error) {
-	var m sqlc.Movement
-	err := l.inTx(ctx, func(q *sqlc.Queries) error {
-		product, location, err := loadProductAndLocation(ctx, q, in.ProductID, in.LocationID, in.Quantity)
+type Ledger struct {
+	pool *pgxpool.Pool
+}
+
+func NewLedger(pool *pgxpool.Pool) *Ledger {
+	return &Ledger{pool: pool}
+}
+
+// change is one bin's stock effect: positive adds, negative removes.
+type change struct {
+	locationID int64
+	delta      decimal.Decimal
+}
+
+func (l *Ledger) PostIn(ctx context.Context, req InRequest) (m sqlc.Movement, err error) {
+	err = l.inTx(ctx, func(q *sqlc.Queries) error {
+		product, location, err := loadProductAndLocation(ctx, q, req.ProductID, req.LocationID, req.Quantity)
 		if err != nil {
 			return err
 		}
-
 		oldQty, err := q.GetProductTotalQuantity(ctx, product.ID)
 		if err != nil {
 			return err
 		}
-		newAvg := WeightedAverage(toDecimal(oldQty), toDecimal(product.AverageCost), in.Quantity, in.UnitCost)
+		newAvg := WeightedAverage(toDecimal(oldQty), toDecimal(product.AverageCost), req.Quantity, req.UnitCost)
 
-		m, err = q.CreateMovement(ctx, sqlc.CreateMovementParams{
+		m, err = applyChanges(ctx, q, sqlc.CreateMovementParams{
 			ProductID:    product.ID,
 			MovementType: "IN",
 			ToLocationID: optID(location.ID),
-			Quantity:     toNumeric(in.Quantity),
-			UnitCost:     toNumeric(in.UnitCost),
-			Reference:    in.Reference,
-			CreatedBy:    in.CreatedBy,
-		})
+			Quantity:     toNumeric(req.Quantity),
+			UnitCost:     toNumeric(req.UnitCost),
+			Reference:    req.Reference,
+			CreatedBy:    req.CreatedBy,
+		}, []change{{location.ID, req.Quantity}})
 		if err != nil {
-			return err
-		}
-		if err := addEntry(ctx, q, m, location.ID, in.Quantity, in.UnitCost); err != nil {
-			return err
-		}
-		if err := addStock(ctx, q, product.ID, location.ID, in.Quantity); err != nil {
 			return err
 		}
 		_, err = q.UpdateProductAverageCost(ctx, sqlc.UpdateProductAverageCostParams{ID: product.ID, AverageCost: toNumeric(newAvg)})
@@ -150,123 +118,87 @@ func (l *Ledger) PostIn(ctx context.Context, in InInput) (sqlc.Movement, error) 
 }
 
 // PostOut values the shipment at the current average and stores that cost on the movement.
-func (l *Ledger) PostOut(ctx context.Context, in OutInput) (sqlc.Movement, error) {
-	var m sqlc.Movement
-	err := l.inTx(ctx, func(q *sqlc.Queries) error {
-		product, location, err := loadProductAndLocation(ctx, q, in.ProductID, in.LocationID, in.Quantity)
+func (l *Ledger) PostOut(ctx context.Context, req OutRequest) (m sqlc.Movement, err error) {
+	err = l.inTx(ctx, func(q *sqlc.Queries) error {
+		product, location, err := loadProductAndLocation(ctx, q, req.ProductID, req.LocationID, req.Quantity)
 		if err != nil {
 			return err
 		}
-		if err := takeStock(ctx, q, product.ID, location.ID, in.Quantity); err != nil {
-			return err
-		}
-
-		cost := toDecimal(product.AverageCost)
-		m, err = q.CreateMovement(ctx, sqlc.CreateMovementParams{
+		m, err = applyChanges(ctx, q, sqlc.CreateMovementParams{
 			ProductID:      product.ID,
 			MovementType:   "OUT",
 			FromLocationID: optID(location.ID),
-			Quantity:       toNumeric(in.Quantity),
-			UnitCost:       toNumeric(cost),
-			Reference:      in.Reference,
-			CreatedBy:      in.CreatedBy,
-		})
-		if err != nil {
-			return err
-		}
-		return addEntry(ctx, q, m, location.ID, in.Quantity.Neg(), cost)
+			Quantity:       toNumeric(req.Quantity),
+			UnitCost:       product.AverageCost,
+			Reference:      req.Reference,
+			CreatedBy:      req.CreatedBy,
+		}, []change{{location.ID, req.Quantity.Neg()}})
+		return err
 	})
 	return m, err
 }
 
 // PostTransfer moves stock between two bins as one movement with two entries.
 // The average cost does not change.
-func (l *Ledger) PostTransfer(ctx context.Context, in TransferInput) (sqlc.Movement, error) {
-	var m sqlc.Movement
-	err := l.inTx(ctx, func(q *sqlc.Queries) error {
-		product, from, err := loadProductAndLocation(ctx, q, in.ProductID, in.FromLocationID, in.Quantity)
+func (l *Ledger) PostTransfer(ctx context.Context, req TransferRequest) (m sqlc.Movement, err error) {
+	err = l.inTx(ctx, func(q *sqlc.Queries) error {
+		product, from, err := loadProductAndLocation(ctx, q, req.ProductID, req.FromLocationID, req.Quantity)
 		if err != nil {
 			return err
 		}
-		to, err := getLocation(ctx, q, in.ToLocationID)
+		to, err := getLocation(ctx, q, req.ToLocationID)
 		if err != nil {
 			return err
 		}
-		if err := takeStock(ctx, q, product.ID, from.ID, in.Quantity); err != nil {
-			return err
-		}
-		if err := addStock(ctx, q, product.ID, to.ID, in.Quantity); err != nil {
-			return err
-		}
-
-		cost := toDecimal(product.AverageCost)
-		m, err = q.CreateMovement(ctx, sqlc.CreateMovementParams{
+		m, err = applyChanges(ctx, q, sqlc.CreateMovementParams{
 			ProductID:      product.ID,
 			MovementType:   "TRANSFER",
 			FromLocationID: optID(from.ID),
 			ToLocationID:   optID(to.ID),
-			Quantity:       toNumeric(in.Quantity),
-			UnitCost:       toNumeric(cost),
-			Reference:      in.Reference,
-			CreatedBy:      in.CreatedBy,
-		})
-		if err != nil {
-			return err
-		}
-		if err := addEntry(ctx, q, m, from.ID, in.Quantity.Neg(), cost); err != nil {
-			return err
-		}
-		return addEntry(ctx, q, m, to.ID, in.Quantity, cost)
+			Quantity:       toNumeric(req.Quantity),
+			UnitCost:       product.AverageCost,
+			Reference:      req.Reference,
+			CreatedBy:      req.CreatedBy,
+		}, []change{{from.ID, req.Quantity.Neg()}, {to.ID, req.Quantity}})
+		return err
 	})
 	return m, err
 }
 
-// PostAdjustment records a counted correction. It is valued at the current
-// average and never changes the average.
-func (l *Ledger) PostAdjustment(ctx context.Context, in AdjustmentInput) (sqlc.Movement, error) {
-	var m sqlc.Movement
-	qty := in.Quantity.Abs()
-	err := l.inTx(ctx, func(q *sqlc.Queries) error {
-		product, location, err := loadProductAndLocation(ctx, q, in.ProductID, in.LocationID, qty)
+// PostAdjustment records a counted correction. The quantity is signed. It is
+// valued at the current average and never changes the average.
+func (l *Ledger) PostAdjustment(ctx context.Context, req AdjustmentRequest) (m sqlc.Movement, err error) {
+	err = l.inTx(ctx, func(q *sqlc.Queries) error {
+		product, location, err := loadProductAndLocation(ctx, q, req.ProductID, req.LocationID, req.Quantity.Abs())
 		if err != nil {
 			return err
 		}
-
-		params := sqlc.CreateMovementParams{
+		row := sqlc.CreateMovementParams{
 			ProductID:    product.ID,
 			MovementType: "ADJUSTMENT",
-			Quantity:     toNumeric(qty),
+			Quantity:     toNumeric(req.Quantity.Abs()),
 			UnitCost:     product.AverageCost,
-			Reason:       pgtype.Text{String: in.Reason, Valid: true},
-			Note:         in.Note,
-			Reference:    in.Reference,
-			CreatedBy:    in.CreatedBy,
+			Reason:       pgtype.Text{String: req.Reason, Valid: true},
+			Note:         req.Note,
+			Reference:    req.Reference,
+			CreatedBy:    req.CreatedBy,
 		}
-		if in.Quantity.IsPositive() {
-			params.ToLocationID = optID(location.ID)
-			err = addStock(ctx, q, product.ID, location.ID, qty)
+		if req.Quantity.IsPositive() {
+			row.ToLocationID = optID(location.ID)
 		} else {
-			params.FromLocationID = optID(location.ID)
-			err = takeStock(ctx, q, product.ID, location.ID, qty)
+			row.FromLocationID = optID(location.ID)
 		}
-		if err != nil {
-			return err
-		}
-
-		m, err = q.CreateMovement(ctx, params)
-		if err != nil {
-			return err
-		}
-		return addEntry(ctx, q, m, location.ID, in.Quantity, toDecimal(product.AverageCost))
+		m, err = applyChanges(ctx, q, row, []change{{location.ID, req.Quantity}})
+		return err
 	})
 	return m, err
 }
 
-// PostReversal undoes a movement by posting its inverse. The original row is never changed.
-func (l *Ledger) PostReversal(ctx context.Context, in ReversalInput) (sqlc.Movement, error) {
-	var m sqlc.Movement
-	err := l.inTx(ctx, func(q *sqlc.Queries) error {
-		original, err := q.LockMovementForReversal(ctx, in.MovementID)
+// PostReversal undoes a movement by applying its entries with the signs flipped.
+// The original row is never changed.
+func (l *Ledger) PostReversal(ctx context.Context, movementID int64, req ReverseRequest) (m sqlc.Movement, err error) {
+	err = l.inTx(ctx, func(q *sqlc.Queries) error {
+		original, err := q.LockMovementForReversal(ctx, movementID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return notFoundError{"movement"}
 		}
@@ -288,30 +220,16 @@ func (l *Ledger) PostReversal(ctx context.Context, in ReversalInput) (sqlc.Movem
 		if err != nil {
 			return err
 		}
-
 		entries, err := q.GetEntriesForReversal(ctx, original.ID)
 		if err != nil {
 			return err
 		}
+		var changes []change
 		for _, e := range entries {
-			delta := toDecimal(e.QuantityDelta).Neg()
-			if delta.IsPositive() {
-				err = addStock(ctx, q, product.ID, e.LocationID, delta)
-			} else {
-				err = takeStock(ctx, q, product.ID, e.LocationID, delta.Neg())
-			}
-			if err != nil {
-				return err
-			}
+			changes = append(changes, change{e.LocationID, toDecimal(e.QuantityDelta).Neg()})
 		}
 
-		if original.MovementType == "IN" {
-			if err := backOutReceipt(ctx, q, product, original); err != nil {
-				return err
-			}
-		}
-
-		m, err = q.CreateMovement(ctx, sqlc.CreateMovementParams{
+		m, err = applyChanges(ctx, q, sqlc.CreateMovementParams{
 			ProductID:      product.ID,
 			MovementType:   "REVERSAL",
 			FromLocationID: original.ToLocationID,
@@ -319,23 +237,57 @@ func (l *Ledger) PostReversal(ctx context.Context, in ReversalInput) (sqlc.Movem
 			Quantity:       original.Quantity,
 			UnitCost:       original.UnitCost,
 			Reference:      fmt.Sprintf("Reversal of movement #%d", original.ID),
-			Note:           in.Note,
-			CreatedBy:      in.CreatedBy,
+			Note:           req.Note,
+			CreatedBy:      req.CreatedBy,
 			ReversalOfID:   optID(original.ID),
-		})
+		}, changes)
 		if isUniqueViolation(err) {
 			return errAlreadyReversed
 		}
 		if err != nil {
 			return err
 		}
-		_, err = q.CreateReversalEntries(ctx, sqlc.CreateReversalEntriesParams{
-			ReversalMovementID: m.ID,
-			OriginalMovementID: original.ID,
-		})
-		return err
+
+		if original.MovementType == "IN" {
+			return backOutReceipt(ctx, q, product, original)
+		}
+		return nil
 	})
 	return m, err
+}
+
+// applyChanges updates each bin's balance, then records the movement and one
+// ledger entry per change. Balance and ledger are always written together.
+func applyChanges(ctx context.Context, q *sqlc.Queries, row sqlc.CreateMovementParams, changes []change) (sqlc.Movement, error) {
+	for _, c := range changes {
+		var err error
+		if c.delta.IsPositive() {
+			err = addStock(ctx, q, row.ProductID, c.locationID, c.delta)
+		} else {
+			err = takeStock(ctx, q, row.ProductID, c.locationID, c.delta.Neg())
+		}
+		if err != nil {
+			return sqlc.Movement{}, err
+		}
+	}
+
+	m, err := q.CreateMovement(ctx, row)
+	if err != nil {
+		return sqlc.Movement{}, err
+	}
+	for _, c := range changes {
+		_, err := q.CreateMovementEntry(ctx, sqlc.CreateMovementEntryParams{
+			MovementID:    m.ID,
+			ProductID:     m.ProductID,
+			LocationID:    c.locationID,
+			QuantityDelta: toNumeric(c.delta),
+			UnitCost:      row.UnitCost,
+		})
+		if err != nil {
+			return sqlc.Movement{}, err
+		}
+	}
+	return m, nil
 }
 
 // backOutReceipt removes a reversed receipt from the average cost.
@@ -429,17 +381,6 @@ func takeStock(ctx context.Context, q *sqlc.Queries, productID, locationID int64
 		return err
 	}
 	return insufficientStockError{location: bal.LocationCode, available: toDecimal(bal.Quantity), requested: qty}
-}
-
-func addEntry(ctx context.Context, q *sqlc.Queries, m sqlc.Movement, locationID int64, delta, cost decimal.Decimal) error {
-	_, err := q.CreateMovementEntry(ctx, sqlc.CreateMovementEntryParams{
-		MovementID:    m.ID,
-		ProductID:     m.ProductID,
-		LocationID:    locationID,
-		QuantityDelta: toNumeric(delta),
-		UnitCost:      toNumeric(cost),
-	})
-	return err
 }
 
 func optID(v int64) pgtype.Int8 { return pgtype.Int8{Int64: v, Valid: true} }
