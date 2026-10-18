@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -246,6 +247,7 @@ func (h *MovementHandler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 // list supports filters: product_id, location_id, type, reference, from, to (dates or RFC 3339), page, page_size.
+// ?format=csv downloads every matching row (up to csvMaxRows) instead of one page.
 func (h *MovementHandler) list(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	fields := map[string]string{}
@@ -271,6 +273,10 @@ func (h *MovementHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	page, size := pageParams(query.Get("page"), query.Get("page_size"))
+	asCSV := query.Get("format") == "csv"
+	if asCSV {
+		page, size = 1, csvMaxRows
+	}
 	rows, err := h.q.ListMovementHistory(r.Context(), sqlc.ListMovementHistoryParams{
 		ProductID: f.ProductID, MovementType: f.MovementType, LocationID: f.LocationID,
 		Reference: f.Reference, FromDate: f.FromDate, ToDate: f.ToDate,
@@ -280,15 +286,19 @@ func (h *MovementHandler) list(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w, err)
 		return
 	}
+	data := make([]movementDetailResponse, len(rows))
+	for i, row := range rows {
+		data[i] = toDetailResponse(sqlc.GetMovementDetailRow(row)) // same columns, same struct shape
+	}
+	if asCSV {
+		writeMovementsCSV(w, data)
+		return
+	}
+
 	total, err := h.q.CountMovementHistory(r.Context(), f)
 	if err != nil {
 		writeInternalError(w, err)
 		return
-	}
-
-	data := make([]movementDetailResponse, len(rows))
-	for i, row := range rows {
-		data[i] = toDetailResponse(sqlc.GetMovementDetailRow(row)) // same columns, same struct shape
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data, "page": page, "page_size": size, "total": total})
 }
@@ -299,6 +309,24 @@ func valid(w http.ResponseWriter, fields map[string]string) bool {
 		return false
 	}
 	return true
+}
+
+func writeMovementsCSV(w http.ResponseWriter, data []movementDetailResponse) {
+	rows := make([][]string, len(data))
+	for i, m := range data {
+		rows[i] = []string{
+			strconv.FormatInt(m.ID, 10), m.CreatedAt.Format(time.RFC3339), m.Type,
+			m.SKU, csvText(m.ProductName), m.Unit, csvPtr(m.FromLocationCode), csvPtr(m.ToLocationCode),
+			m.Quantity.String(), csvDecimal(m.UnitCost), csvDecimal(m.TotalValue),
+			csvText(m.Reference), csvPtr(m.Reason), csvText(m.Note), csvText(m.CreatedBy),
+			csvID(m.ReversesMovementID), csvID(m.ReversedByID),
+		}
+	}
+	writeCSV(w, "movements.csv", []string{
+		"id", "created_at", "type", "sku", "product_name", "unit", "from_location", "to_location",
+		"quantity", "unit_cost", "total_value", "reference", "reason", "note", "created_by",
+		"reverses_movement_id", "reversed_by_id",
+	}, rows)
 }
 
 // readKey reads the optional Idempotency-Key header. A retry with the same key
