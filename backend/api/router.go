@@ -18,5 +18,6 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 	NewMovementHandler(q, NewLedger(pool)).Register(mux)
 	NewReportHandler(q).Register(mux)
 	NewHealthHandler(pool).Register(mux)
+	DocsHandler{}.Register(mux)
 	return Logger(Recover(mux))
 }
