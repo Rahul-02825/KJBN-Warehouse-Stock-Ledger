@@ -163,3 +163,10 @@ CREATE TABLE stock_balances (
 
 CREATE INDEX idx_stock_balances_location
     ON stock_balances (location_id);
+
+-- ---- 000006_add_movement_idempotency_key.up.sql ----
+-- A client-supplied key that makes a posting safe to retry: the same key never posts twice.
+ALTER TABLE movements ADD COLUMN idempotency_key VARCHAR(128);
+
+ALTER TABLE movements
+    ADD CONSTRAINT movements_idempotency_key_key UNIQUE (idempotency_key);

@@ -34,6 +34,7 @@ type Querier interface {
 	GetLocationByCode(ctx context.Context, code string) (Location, error)
 	GetLocationByID(ctx context.Context, id int64) (Location, error)
 	GetMovementByID(ctx context.Context, id int64) (Movement, error)
+	GetMovementByIdempotencyKey(ctx context.Context, idempotencyKey pgtype.Text) (Movement, error)
 	// Single movement with display names and reversal status.
 	GetMovementDetail(ctx context.Context, id int64) (GetMovementDetailRow, error)
 	GetProductByID(ctx context.Context, id int64) (Product, error)

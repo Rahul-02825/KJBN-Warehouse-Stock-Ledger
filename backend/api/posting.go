@@ -49,6 +49,9 @@ func (e notReversibleError) Error() string { return e.reason }
 
 var errAlreadyReversed = errors.New("movement has already been reversed")
 
+// errReplay means the Idempotency-Key was already used; the handler returns the original movement.
+var errReplay = errors.New("idempotency key already used")
+
 // WeightedAverage returns the new average cost after receiving qty at cost.
 func WeightedAverage(oldQty, oldAvg, qty, cost decimal.Decimal) decimal.Decimal {
 	if !oldQty.IsPositive() {
@@ -100,13 +103,14 @@ func (l *Ledger) PostIn(ctx context.Context, req InRequest) (m sqlc.Movement, er
 		newAvg := WeightedAverage(toDecimal(oldQty), toDecimal(product.AverageCost), req.Quantity, req.UnitCost)
 
 		m, err = applyChanges(ctx, q, sqlc.CreateMovementParams{
-			ProductID:    product.ID,
-			MovementType: "IN",
-			ToLocationID: optID(location.ID),
-			Quantity:     toNumeric(req.Quantity),
-			UnitCost:     toNumeric(req.UnitCost),
-			Reference:    req.Reference,
-			CreatedBy:    req.CreatedBy,
+			ProductID:      product.ID,
+			MovementType:   "IN",
+			ToLocationID:   optID(location.ID),
+			Quantity:       toNumeric(req.Quantity),
+			UnitCost:       toNumeric(req.UnitCost),
+			Reference:      req.Reference,
+			CreatedBy:      req.CreatedBy,
+			IdempotencyKey: optText(req.IdempotencyKey),
 		}, []change{{location.ID, req.Quantity}})
 		if err != nil {
 			return err
@@ -132,6 +136,7 @@ func (l *Ledger) PostOut(ctx context.Context, req OutRequest) (m sqlc.Movement, 
 			UnitCost:       product.AverageCost,
 			Reference:      req.Reference,
 			CreatedBy:      req.CreatedBy,
+			IdempotencyKey: optText(req.IdempotencyKey),
 		}, []change{{location.ID, req.Quantity.Neg()}})
 		return err
 	})
@@ -159,6 +164,7 @@ func (l *Ledger) PostTransfer(ctx context.Context, req TransferRequest) (m sqlc.
 			UnitCost:       product.AverageCost,
 			Reference:      req.Reference,
 			CreatedBy:      req.CreatedBy,
+			IdempotencyKey: optText(req.IdempotencyKey),
 		}, []change{{from.ID, req.Quantity.Neg()}, {to.ID, req.Quantity}})
 		return err
 	})
@@ -174,14 +180,15 @@ func (l *Ledger) PostAdjustment(ctx context.Context, req AdjustmentRequest) (m s
 			return err
 		}
 		row := sqlc.CreateMovementParams{
-			ProductID:    product.ID,
-			MovementType: "ADJUSTMENT",
-			Quantity:     toNumeric(req.Quantity.Abs()),
-			UnitCost:     product.AverageCost,
-			Reason:       pgtype.Text{String: req.Reason, Valid: true},
-			Note:         req.Note,
-			Reference:    req.Reference,
-			CreatedBy:    req.CreatedBy,
+			ProductID:      product.ID,
+			MovementType:   "ADJUSTMENT",
+			Quantity:       toNumeric(req.Quantity.Abs()),
+			UnitCost:       product.AverageCost,
+			Reason:         pgtype.Text{String: req.Reason, Valid: true},
+			Note:           req.Note,
+			Reference:      req.Reference,
+			CreatedBy:      req.CreatedBy,
+			IdempotencyKey: optText(req.IdempotencyKey),
 		}
 		if req.Quantity.IsPositive() {
 			row.ToLocationID = optID(location.ID)
@@ -203,6 +210,9 @@ func (l *Ledger) PostReversal(ctx context.Context, movementID int64, req Reverse
 			return notFoundError{"movement"}
 		}
 		if err != nil {
+			return err
+		}
+		if err := checkKey(ctx, q, req.IdempotencyKey); err != nil {
 			return err
 		}
 		if original.MovementType == "REVERSAL" {
@@ -240,6 +250,7 @@ func (l *Ledger) PostReversal(ctx context.Context, movementID int64, req Reverse
 			Note:           req.Note,
 			CreatedBy:      req.CreatedBy,
 			ReversalOfID:   optID(original.ID),
+			IdempotencyKey: optText(req.IdempotencyKey),
 		}, changes)
 		if isUniqueViolation(err) {
 			return errAlreadyReversed
@@ -258,7 +269,12 @@ func (l *Ledger) PostReversal(ctx context.Context, movementID int64, req Reverse
 
 // applyChanges updates each bin's balance, then records the movement and one
 // ledger entry per change. Balance and ledger are always written together.
+// The product is already locked, so a retry with the same key waits here and
+// then finds the first posting.
 func applyChanges(ctx context.Context, q *sqlc.Queries, row sqlc.CreateMovementParams, changes []change) (sqlc.Movement, error) {
+	if err := checkKey(ctx, q, row.IdempotencyKey.String); err != nil {
+		return sqlc.Movement{}, err
+	}
 	for _, c := range changes {
 		var err error
 		if c.delta.IsPositive() {
@@ -272,6 +288,9 @@ func applyChanges(ctx context.Context, q *sqlc.Queries, row sqlc.CreateMovementP
 	}
 
 	m, err := q.CreateMovement(ctx, row)
+	if constraintName(err) == "movements_idempotency_key_key" {
+		return sqlc.Movement{}, errReplay // same key used at the same moment for another product
+	}
 	if err != nil {
 		return sqlc.Movement{}, err
 	}
@@ -383,7 +402,32 @@ func takeStock(ctx context.Context, q *sqlc.Queries, productID, locationID int64
 	return insufficientStockError{location: bal.LocationCode, available: toDecimal(bal.Quantity), requested: qty}
 }
 
+// checkKey returns errReplay when a movement with this idempotency key already exists.
+func checkKey(ctx context.Context, q *sqlc.Queries, key string) error {
+	if key == "" {
+		return nil
+	}
+	_, err := q.GetMovementByIdempotencyKey(ctx, optText(key))
+	if err == nil {
+		return errReplay
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	return err
+}
+
 func optID(v int64) pgtype.Int8 { return pgtype.Int8{Int64: v, Valid: true} }
+
+func optText(s string) pgtype.Text { return pgtype.Text{String: s, Valid: s != ""} }
+
+func constraintName(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.ConstraintName
+	}
+	return ""
+}
 
 func isNumericOverflow(err error) bool {
 	var pgErr *pgconn.PgError

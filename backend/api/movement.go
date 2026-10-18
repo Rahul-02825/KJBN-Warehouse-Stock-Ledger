@@ -42,6 +42,8 @@ type InRequest struct {
 	UnitCost   decimal.Decimal `json:"unit_cost"`
 	Reference  string          `json:"reference"`
 	CreatedBy  string          `json:"created_by"`
+
+	IdempotencyKey string `json:"-"` // from the Idempotency-Key header
 }
 
 func (r *InRequest) validate() map[string]string {
@@ -59,6 +61,8 @@ type OutRequest struct {
 	Quantity   decimal.Decimal `json:"quantity"`
 	Reference  string          `json:"reference"`
 	CreatedBy  string          `json:"created_by"`
+
+	IdempotencyKey string `json:"-"`
 }
 
 func (r *OutRequest) validate() map[string]string {
@@ -76,6 +80,8 @@ type TransferRequest struct {
 	Quantity       decimal.Decimal `json:"quantity"`
 	Reference      string          `json:"reference"`
 	CreatedBy      string          `json:"created_by"`
+
+	IdempotencyKey string `json:"-"`
 }
 
 func (r *TransferRequest) validate() map[string]string {
@@ -99,6 +105,8 @@ type AdjustmentRequest struct {
 	Note       string          `json:"note"`
 	Reference  string          `json:"reference"`
 	CreatedBy  string          `json:"created_by"`
+
+	IdempotencyKey string `json:"-"`
 }
 
 func (r *AdjustmentRequest) validate() map[string]string {
@@ -123,6 +131,8 @@ func (r *AdjustmentRequest) validate() map[string]string {
 type ReverseRequest struct {
 	Note      string `json:"note"`
 	CreatedBy string `json:"created_by"`
+
+	IdempotencyKey string `json:"-"`
 }
 
 func (r *ReverseRequest) validate() map[string]string {
@@ -135,42 +145,58 @@ func (r *ReverseRequest) validate() map[string]string {
 	return f
 }
 
-// Handlers: read JSON, validate, post, respond.
+// Handlers: read the key and JSON, validate, post, respond.
 
 func (h *MovementHandler) postIn(w http.ResponseWriter, r *http.Request) {
 	var req InRequest
-	if !readJSON(w, r, &req) || !valid(w, req.validate()) {
+	key, ok := readKey(w, r)
+	if !ok || !readJSON(w, r, &req) || !valid(w, req.validate()) {
 		return
 	}
+	req.IdempotencyKey = key
 	m, err := h.ledger.PostIn(r.Context(), req)
-	respondPosted(w, r, m, err)
+	h.respond(w, r, key, m, err, func(o sqlc.Movement) bool {
+		return o.MovementType == "IN" && o.ProductID == req.ProductID
+	})
 }
 
 func (h *MovementHandler) postOut(w http.ResponseWriter, r *http.Request) {
 	var req OutRequest
-	if !readJSON(w, r, &req) || !valid(w, req.validate()) {
+	key, ok := readKey(w, r)
+	if !ok || !readJSON(w, r, &req) || !valid(w, req.validate()) {
 		return
 	}
+	req.IdempotencyKey = key
 	m, err := h.ledger.PostOut(r.Context(), req)
-	respondPosted(w, r, m, err)
+	h.respond(w, r, key, m, err, func(o sqlc.Movement) bool {
+		return o.MovementType == "OUT" && o.ProductID == req.ProductID
+	})
 }
 
 func (h *MovementHandler) postTransfer(w http.ResponseWriter, r *http.Request) {
 	var req TransferRequest
-	if !readJSON(w, r, &req) || !valid(w, req.validate()) {
+	key, ok := readKey(w, r)
+	if !ok || !readJSON(w, r, &req) || !valid(w, req.validate()) {
 		return
 	}
+	req.IdempotencyKey = key
 	m, err := h.ledger.PostTransfer(r.Context(), req)
-	respondPosted(w, r, m, err)
+	h.respond(w, r, key, m, err, func(o sqlc.Movement) bool {
+		return o.MovementType == "TRANSFER" && o.ProductID == req.ProductID
+	})
 }
 
 func (h *MovementHandler) postAdjustment(w http.ResponseWriter, r *http.Request) {
 	var req AdjustmentRequest
-	if !readJSON(w, r, &req) || !valid(w, req.validate()) {
+	key, ok := readKey(w, r)
+	if !ok || !readJSON(w, r, &req) || !valid(w, req.validate()) {
 		return
 	}
+	req.IdempotencyKey = key
 	m, err := h.ledger.PostAdjustment(r.Context(), req)
-	respondPosted(w, r, m, err)
+	h.respond(w, r, key, m, err, func(o sqlc.Movement) bool {
+		return o.MovementType == "ADJUSTMENT" && o.ProductID == req.ProductID
+	})
 }
 
 func (h *MovementHandler) reverse(w http.ResponseWriter, r *http.Request) {
@@ -179,11 +205,15 @@ func (h *MovementHandler) reverse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req ReverseRequest
-	if !readJSON(w, r, &req) || !valid(w, req.validate()) {
+	key, ok := readKey(w, r)
+	if !ok || !readJSON(w, r, &req) || !valid(w, req.validate()) {
 		return
 	}
+	req.IdempotencyKey = key
 	m, err := h.ledger.PostReversal(r.Context(), id, req)
-	respondPosted(w, r, m, err)
+	h.respond(w, r, key, m, err, func(o sqlc.Movement) bool {
+		return o.MovementType == "REVERSAL" && o.ReversalOfID.Int64 == id
+	})
 }
 
 func (h *MovementHandler) get(w http.ResponseWriter, r *http.Request) {
@@ -271,7 +301,34 @@ func valid(w http.ResponseWriter, fields map[string]string) bool {
 	return true
 }
 
-func respondPosted(w http.ResponseWriter, r *http.Request, m sqlc.Movement, err error) {
+// readKey reads the optional Idempotency-Key header. A retry with the same key
+// returns the first result instead of posting again.
+func readKey(w http.ResponseWriter, r *http.Request) (string, bool) {
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if len(key) > 128 {
+		writeValidationError(w, map[string]string{"Idempotency-Key": "max 128 characters"})
+		return "", false
+	}
+	return key, true
+}
+
+// respond writes the posting result. When the key was already used, it returns the
+// original movement with 200, provided the key was used for the same kind of request.
+func (h *MovementHandler) respond(w http.ResponseWriter, r *http.Request, key string, m sqlc.Movement, err error, sameRequest func(sqlc.Movement) bool) {
+	if errors.Is(err, errReplay) {
+		original, err := h.q.GetMovementByIdempotencyKey(r.Context(), optText(key))
+		if err != nil {
+			writeInternalError(w, err)
+			return
+		}
+		if !sameRequest(original) {
+			writeError(w, http.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "this Idempotency-Key was already used for a different request")
+			return
+		}
+		w.Header().Set("Idempotent-Replayed", "true")
+		writeJSON(w, http.StatusOK, toMovementResponse(original))
+		return
+	}
 	if err != nil {
 		writePostingError(w, r, err)
 		return
