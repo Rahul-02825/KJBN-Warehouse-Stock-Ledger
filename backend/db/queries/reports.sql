@@ -109,3 +109,36 @@ WHERE m.movement_type = 'OUT'
 GROUP BY p.id
 ORDER BY shipped_value DESC, p.name
 LIMIT sqlc.arg('max_rows');
+
+-- Products whose current stock is below what was shipped in the same window last year.
+-- Reversed shipments are not demand. Products with no shipments in that window are left out.
+-- name: ListSeasonForecast :many
+WITH last_year AS (
+    SELECT m.product_id, SUM(m.quantity) AS demand
+    FROM movements m
+    WHERE m.movement_type = 'OUT'
+      AND m.created_at >= sqlc.arg('window_start')
+      AND m.created_at < sqlc.arg('window_end')
+      AND NOT EXISTS (SELECT 1 FROM movements r WHERE r.reversal_of_id = m.id)
+    GROUP BY m.product_id
+),
+stock AS (
+    SELECT product_id, SUM(quantity) AS quantity
+    FROM stock_balances
+    GROUP BY product_id
+)
+SELECT
+    p.id AS product_id,
+    p.sku,
+    p.name,
+    p.unit,
+    ly.demand::NUMERIC(18, 4) AS last_year_demand,
+    COALESCE(s.quantity, 0)::NUMERIC(18, 4) AS current_stock,
+    (ly.demand - COALESCE(s.quantity, 0))::NUMERIC(18, 4) AS gap,
+    p.average_cost,
+    ((ly.demand - COALESCE(s.quantity, 0)) * p.average_cost)::NUMERIC(24, 4) AS gap_value
+FROM last_year ly
+JOIN products p ON p.id = ly.product_id
+LEFT JOIN stock s ON s.product_id = p.id
+WHERE ly.demand > COALESCE(s.quantity, 0)
+ORDER BY gap_value DESC, gap DESC, p.name;

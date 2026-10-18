@@ -264,6 +264,87 @@ func (q *Queries) ListReconciliation(ctx context.Context, onlyDrift bool) ([]Lis
 	return items, nil
 }
 
+const listSeasonForecast = `-- name: ListSeasonForecast :many
+WITH last_year AS (
+    SELECT m.product_id, SUM(m.quantity) AS demand
+    FROM movements m
+    WHERE m.movement_type = 'OUT'
+      AND m.created_at >= $1
+      AND m.created_at < $2
+      AND NOT EXISTS (SELECT 1 FROM movements r WHERE r.reversal_of_id = m.id)
+    GROUP BY m.product_id
+),
+stock AS (
+    SELECT product_id, SUM(quantity) AS quantity
+    FROM stock_balances
+    GROUP BY product_id
+)
+SELECT
+    p.id AS product_id,
+    p.sku,
+    p.name,
+    p.unit,
+    ly.demand::NUMERIC(18, 4) AS last_year_demand,
+    COALESCE(s.quantity, 0)::NUMERIC(18, 4) AS current_stock,
+    (ly.demand - COALESCE(s.quantity, 0))::NUMERIC(18, 4) AS gap,
+    p.average_cost,
+    ((ly.demand - COALESCE(s.quantity, 0)) * p.average_cost)::NUMERIC(24, 4) AS gap_value
+FROM last_year ly
+JOIN products p ON p.id = ly.product_id
+LEFT JOIN stock s ON s.product_id = p.id
+WHERE ly.demand > COALESCE(s.quantity, 0)
+ORDER BY gap_value DESC, gap DESC, p.name
+`
+
+type ListSeasonForecastParams struct {
+	WindowStart pgtype.Timestamptz `json:"window_start"`
+	WindowEnd   pgtype.Timestamptz `json:"window_end"`
+}
+
+type ListSeasonForecastRow struct {
+	ProductID      int64          `json:"product_id"`
+	Sku            string         `json:"sku"`
+	Name           string         `json:"name"`
+	Unit           string         `json:"unit"`
+	LastYearDemand pgtype.Numeric `json:"last_year_demand"`
+	CurrentStock   pgtype.Numeric `json:"current_stock"`
+	Gap            pgtype.Numeric `json:"gap"`
+	AverageCost    pgtype.Numeric `json:"average_cost"`
+	GapValue       pgtype.Numeric `json:"gap_value"`
+}
+
+// Products whose current stock is below what was shipped in the same window last year.
+// Reversed shipments are not demand. Products with no shipments in that window are left out.
+func (q *Queries) ListSeasonForecast(ctx context.Context, arg ListSeasonForecastParams) ([]ListSeasonForecastRow, error) {
+	rows, err := q.db.Query(ctx, listSeasonForecast, arg.WindowStart, arg.WindowEnd)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSeasonForecastRow{}
+	for rows.Next() {
+		var i ListSeasonForecastRow
+		if err := rows.Scan(
+			&i.ProductID,
+			&i.Sku,
+			&i.Name,
+			&i.Unit,
+			&i.LastYearDemand,
+			&i.CurrentStock,
+			&i.Gap,
+			&i.AverageCost,
+			&i.GapValue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTopMovers = `-- name: ListTopMovers :many
 SELECT
     p.id AS product_id,
