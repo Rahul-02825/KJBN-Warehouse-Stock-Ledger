@@ -63,7 +63,7 @@ func (q *Queries) GetEntriesForReversal(ctx context.Context, movementID int64) (
 }
 
 const getReversalForMovement = `-- name: GetReversalForMovement :one
-SELECT id, product_id, movement_type, from_location_id, to_location_id, quantity, unit_cost, reference, reason, note, created_by, reversal_of_id, created_at
+SELECT id, product_id, movement_type, from_location_id, to_location_id, quantity, unit_cost, reference, reason, note, created_by, reversal_of_id, created_at, idempotency_key
 FROM movements
 WHERE reversal_of_id = $1
 `
@@ -85,12 +85,13 @@ func (q *Queries) GetReversalForMovement(ctx context.Context, reversalOfID pgtyp
 		&i.CreatedBy,
 		&i.ReversalOfID,
 		&i.CreatedAt,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
 const lockMovementForReversal = `-- name: LockMovementForReversal :one
-SELECT id, product_id, movement_type, from_location_id, to_location_id, quantity, unit_cost, reference, reason, note, created_by, reversal_of_id, created_at
+SELECT id, product_id, movement_type, from_location_id, to_location_id, quantity, unit_cost, reference, reason, note, created_by, reversal_of_id, created_at, idempotency_key
 FROM movements
 WHERE id = $1
 FOR UPDATE
@@ -115,6 +116,7 @@ func (q *Queries) LockMovementForReversal(ctx context.Context, id int64) (Moveme
 		&i.CreatedBy,
 		&i.ReversalOfID,
 		&i.CreatedAt,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }

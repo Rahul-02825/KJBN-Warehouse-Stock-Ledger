@@ -95,3 +95,16 @@ func assertLedgerMatchesCache(t *testing.T, pool *pgxpool.Pool) {
 		t.Fatalf("%d balances differ from the ledger", drift)
 	}
 }
+
+// sendRaw makes a request with optional headers and returns the raw recorder.
+func sendRaw(h http.Handler, method, path, body string, headers map[string]string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+func withKey(key string) map[string]string { return map[string]string{"Idempotency-Key": key} }
