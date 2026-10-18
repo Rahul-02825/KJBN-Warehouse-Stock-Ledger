@@ -74,6 +74,20 @@ func ValidateQuantity(d decimal.Decimal) string {
 	return ""
 }
 
+// BackOutAverage removes a reversed receipt (qty at cost) from the average.
+// remaining is the stock left after the receipt's quantity was taken out.
+// It returns false when the receipt's value has already been shipped out.
+func BackOutAverage(remaining, avg, qty, cost decimal.Decimal) (decimal.Decimal, bool) {
+	if !remaining.IsPositive() {
+		return avg, true // nothing left; keep the last average
+	}
+	value := remaining.Add(qty).Mul(avg).Sub(qty.Mul(cost))
+	if value.IsNegative() {
+		return avg, false
+	}
+	return value.Div(remaining).Round(4), true
+}
+
 func ValidReason(r string) bool { return adjustmentReasons[r] }
 
 type Ledger struct {
@@ -316,18 +330,11 @@ func backOutReceipt(ctx context.Context, q *sqlc.Queries, product sqlc.Product, 
 	if err != nil {
 		return err
 	}
-	remaining := toDecimal(remainingNum)
-	if !remaining.IsPositive() {
-		return nil // nothing left; keep the last average
-	}
-
-	qty := toDecimal(receipt.Quantity)
-	avg := toDecimal(product.AverageCost)
-	value := remaining.Add(qty).Mul(avg).Sub(qty.Mul(toDecimal(receipt.UnitCost)))
-	if value.IsNegative() {
+	newAvg, ok := BackOutAverage(toDecimal(remainingNum), toDecimal(product.AverageCost),
+		toDecimal(receipt.Quantity), toDecimal(receipt.UnitCost))
+	if !ok {
 		return notReversibleError{"stock valued from this receipt has already been used; post an adjustment instead"}
 	}
-	newAvg := value.Div(remaining).Round(4)
 	_, err = q.UpdateProductAverageCost(ctx, sqlc.UpdateProductAverageCostParams{ID: product.ID, AverageCost: toNumeric(newAvg)})
 	return err
 }

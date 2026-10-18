@@ -60,8 +60,12 @@ type Querier interface {
 	// History with optional filters and offset pagination.
 	// to_date is exclusive so callers can pass "next day 00:00" for a date range.
 	ListMovementHistory(ctx context.Context, arg ListMovementHistoryParams) ([]ListMovementHistoryRow, error)
+	// Every movement in posting order, for replaying the average cost.
+	// net_delta is the movement's total stock effect across all bins.
+	ListMovementsForCostCheck(ctx context.Context) ([]ListMovementsForCostCheckRow, error)
 	// Balances by product: one row per location that holds (or held) this product.
 	ListProductBalances(ctx context.Context, productID int64) ([]ListProductBalancesRow, error)
+	ListProductCosts(ctx context.Context) ([]ListProductCostsRow, error)
 	ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error)
 	// Reconciliation: recompute every (product, location) balance from the ledger
 	// and compare with the cache. Covers cells present on either side. Read-only.

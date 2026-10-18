@@ -23,6 +23,7 @@ func (h *ReportHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/reports/low-stock", h.lowStock)
 	mux.HandleFunc("GET /api/reports/valuation", h.valuation)
 	mux.HandleFunc("GET /api/reports/reconciliation", h.reconciliation)
+	mux.HandleFunc("GET /api/reports/cost-check", h.costCheck)
 	mux.HandleFunc("GET /api/products/{id}/ledger", h.ledger)
 }
 
@@ -191,4 +192,66 @@ func (h *ReportHandler) ledger(w http.ResponseWriter, r *http.Request) {
 		"unit":       product.Unit,
 		"data":       data,
 	})
+}
+
+type costCheckRow struct {
+	ProductID         int64           `json:"product_id"`
+	SKU               string          `json:"sku"`
+	Name              string          `json:"name"`
+	StoredAverage     decimal.Decimal `json:"stored_average"`
+	RecomputedAverage decimal.Decimal `json:"recomputed_average"`
+	Difference        decimal.Decimal `json:"difference"`
+	Matches           bool            `json:"matches"`
+}
+
+// costCheck replays every movement in posting order with the same costing rules
+// used when posting, and compares the result with each product's stored average.
+// Quantity reconciliation cannot catch a wrong average; this can. It only reports.
+func (h *ReportHandler) costCheck(w http.ResponseWriter, r *http.Request) {
+	movements, err := h.q.ListMovementsForCostCheck(r.Context())
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+	products, err := h.q.ListProductCosts(r.Context())
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+
+	qty := map[int64]decimal.Decimal{}
+	avg := map[int64]decimal.Decimal{}
+	for _, m := range movements {
+		id := m.ProductID
+		amount := toDecimal(m.Quantity)
+		switch {
+		case m.MovementType == "IN":
+			avg[id] = WeightedAverage(qty[id], avg[id], amount, toDecimal(m.UnitCost))
+			qty[id] = qty[id].Add(amount)
+		case m.MovementType == "REVERSAL" && m.ReversedType == "IN":
+			qty[id] = qty[id].Sub(amount)
+			avg[id], _ = BackOutAverage(qty[id], avg[id], amount, toDecimal(m.UnitCost))
+		default: // OUT, TRANSFER, ADJUSTMENT and other reversals change stock, not the average
+			qty[id] = qty[id].Add(toDecimal(m.NetDelta))
+		}
+	}
+
+	mismatches := 0
+	data := make([]costCheckRow, len(products))
+	for i, p := range products {
+		stored := toDecimal(p.AverageCost)
+		data[i] = costCheckRow{
+			ProductID:         p.ID,
+			SKU:               p.Sku,
+			Name:              p.Name,
+			StoredAverage:     stored,
+			RecomputedAverage: avg[p.ID],
+			Difference:        stored.Sub(avg[p.ID]),
+			Matches:           stored.Equal(avg[p.ID]),
+		}
+		if !data[i].Matches {
+			mismatches++
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": data, "mismatch_count": mismatches})
 }
