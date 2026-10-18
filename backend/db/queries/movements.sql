@@ -142,27 +142,3 @@ JOIN movements m ON m.id = e.movement_id
 JOIN locations l ON l.id = e.location_id
 WHERE e.product_id = $1
 ORDER BY m.created_at, m.id, e.id;
-
--- Ledger restricted to one bin.
--- name: GetProductLocationLedger :many
-SELECT
-    e.id AS entry_id,
-    m.id AS movement_id,
-    m.created_at,
-    m.movement_type,
-    m.reference,
-    m.reason,
-    m.note,
-    m.created_by,
-    m.reversal_of_id,
-    e.quantity_delta,
-    e.unit_cost,
-    SUM(e.quantity_delta) OVER (
-        ORDER BY m.created_at, m.id, e.id
-        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    )::NUMERIC(18, 4) AS running_balance
-FROM movement_entries e
-JOIN movements m ON m.id = e.movement_id
-WHERE e.product_id = $1
-  AND e.location_id = $2
-ORDER BY m.created_at, m.id, e.id;
