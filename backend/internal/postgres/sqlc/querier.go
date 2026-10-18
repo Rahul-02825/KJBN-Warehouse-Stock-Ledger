@@ -43,15 +43,12 @@ type Querier interface {
 	// entry's own location. Ordered by (created_at, movement id, entry id) so a
 	// transfer's two entries stay adjacent and deterministic.
 	GetProductLedger(ctx context.Context, productID int64) ([]GetProductLedgerRow, error)
-	// Ledger restricted to one bin.
-	GetProductLocationLedger(ctx context.Context, arg GetProductLocationLedgerParams) ([]GetProductLocationLedgerRow, error)
 	// Total on hand for a product across all locations (cached).
 	GetProductTotalQuantity(ctx context.Context, productID int64) (pgtype.Numeric, error)
 	GetReversalForMovement(ctx context.Context, reversalOfID pgtype.Int8) (Movement, error)
 	// Balance for one (product, location) cell. Returns a zero row when no
 	// stock_balances row exists yet, as long as both product and location exist.
 	GetStockBalance(ctx context.Context, arg GetStockBalanceParams) (GetStockBalanceRow, error)
-	GetTotalInventoryValue(ctx context.Context) (pgtype.Numeric, error)
 	IncreaseStockBalance(ctx context.Context, arg IncreaseStockBalanceParams) (int64, error)
 	// Balances by location: one row per product that has (or had) stock in this bin.
 	ListLocationBalances(ctx context.Context, locationID int64) ([]ListLocationBalancesRow, error)

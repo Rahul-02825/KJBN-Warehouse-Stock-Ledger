@@ -1,9 +1,12 @@
 package test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/api"
 )
@@ -121,5 +124,26 @@ func TestMovementHistory_BadFilters(t *testing.T) {
 		if status != http.StatusBadRequest {
 			t.Errorf("%s: status %d, want 400", q, status)
 		}
+	}
+}
+
+func TestProductLedger_BadID(t *testing.T) {
+	status, _ := send(t, routerWithoutDB(), "GET", "/api/products/abc/ledger", "")
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", status)
+	}
+}
+
+// The pool points at a port where nothing listens, so the ping fails.
+func TestHealth_DatabaseDown(t *testing.T) {
+	pool, err := pgxpool.New(context.Background(), "postgres://nobody@127.0.0.1:1/none?connect_timeout=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+
+	status, body := send(t, api.NewRouter(pool), "GET", "/healthz", "")
+	if status != http.StatusServiceUnavailable || body["status"] != "unavailable" {
+		t.Fatalf("got %d %v, want 503 unavailable", status, body)
 	}
 }

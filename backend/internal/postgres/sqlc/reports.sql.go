@@ -65,19 +65,6 @@ func (q *Queries) GetInventoryValuation(ctx context.Context) ([]GetInventoryValu
 	return items, nil
 }
 
-const getTotalInventoryValue = `-- name: GetTotalInventoryValue :one
-SELECT COALESCE(SUM(sb.quantity * p.average_cost), 0)::NUMERIC(24, 4) AS total_value
-FROM stock_balances sb
-JOIN products p ON p.id = sb.product_id
-`
-
-func (q *Queries) GetTotalInventoryValue(ctx context.Context) (pgtype.Numeric, error) {
-	row := q.db.QueryRow(ctx, getTotalInventoryValue)
-	var total_value pgtype.Numeric
-	err := row.Scan(&total_value)
-	return total_value, err
-}
-
 const listLowStockProducts = `-- name: ListLowStockProducts :many
 SELECT
     p.id AS product_id,
