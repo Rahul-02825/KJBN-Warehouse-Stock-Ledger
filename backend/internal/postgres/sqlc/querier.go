@@ -23,6 +23,8 @@ type Querier interface {
 	// Transaction helpers --------------------------------------------------------
 	// Creates the cell if missing so later row locks have something to lock.
 	EnsureStockBalanceExists(ctx context.Context, arg EnsureStockBalanceExistsParams) error
+	// Postings per day (Indian Standard Time) for the last N days, including days with none.
+	GetDailyActivity(ctx context.Context, days int32) ([]GetDailyActivityRow, error)
 	// Entries of the original, ordered by location so balance locks are always
 	// acquired in the same order (deadlock avoidance).
 	GetEntriesForReversal(ctx context.Context, movementID int64) ([]GetEntriesForReversalRow, error)
@@ -75,6 +77,8 @@ type Querier interface {
 	ListStockAsOf(ctx context.Context, arg ListStockAsOfParams) ([]ListStockAsOfRow, error)
 	// Full grid: every product x every location, zero where no balance row.
 	ListStockOverview(ctx context.Context) ([]ListStockOverviewRow, error)
+	// Products ranked by value shipped since a time. Reversed shipments are left out.
+	ListTopMovers(ctx context.Context, arg ListTopMoversParams) ([]ListTopMoversRow, error)
 	// Lock the original so two concurrent reversal attempts serialise; the
 	// UNIQUE constraint on reversal_of_id is the final guard.
 	LockMovementForReversal(ctx context.Context, id int64) (Movement, error)
