@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -34,7 +33,9 @@ func (h *MovementHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/movements/{id}", h.get)
 }
 
-type inRequest struct {
+// Requests. Each validate method trims text fields and returns one message per invalid field.
+
+type InRequest struct {
 	ProductID  int64           `json:"product_id"`
 	LocationID int64           `json:"location_id"`
 	Quantity   decimal.Decimal `json:"quantity"`
@@ -43,7 +44,16 @@ type inRequest struct {
 	CreatedBy  string          `json:"created_by"`
 }
 
-type outRequest struct {
+func (r *InRequest) validate() map[string]string {
+	f := map[string]string{}
+	checkIDs(f, map[string]int64{"product_id": r.ProductID, "location_id": r.LocationID})
+	checkAmount(f, "quantity", r.Quantity)
+	checkAmount(f, "unit_cost", r.UnitCost)
+	r.Reference, r.CreatedBy = checkText(f, r.Reference, r.CreatedBy)
+	return f
+}
+
+type OutRequest struct {
 	ProductID  int64           `json:"product_id"`
 	LocationID int64           `json:"location_id"`
 	Quantity   decimal.Decimal `json:"quantity"`
@@ -51,7 +61,15 @@ type outRequest struct {
 	CreatedBy  string          `json:"created_by"`
 }
 
-type transferRequest struct {
+func (r *OutRequest) validate() map[string]string {
+	f := map[string]string{}
+	checkIDs(f, map[string]int64{"product_id": r.ProductID, "location_id": r.LocationID})
+	checkAmount(f, "quantity", r.Quantity)
+	r.Reference, r.CreatedBy = checkText(f, r.Reference, r.CreatedBy)
+	return f
+}
+
+type TransferRequest struct {
 	ProductID      int64           `json:"product_id"`
 	FromLocationID int64           `json:"from_location_id"`
 	ToLocationID   int64           `json:"to_location_id"`
@@ -60,122 +78,99 @@ type transferRequest struct {
 	CreatedBy      string          `json:"created_by"`
 }
 
-type adjustmentRequest struct {
+func (r *TransferRequest) validate() map[string]string {
+	f := map[string]string{}
+	checkIDs(f, map[string]int64{
+		"product_id": r.ProductID, "from_location_id": r.FromLocationID, "to_location_id": r.ToLocationID,
+	})
+	if r.FromLocationID != 0 && r.FromLocationID == r.ToLocationID {
+		f["to_location_id"] = "must be different from from_location_id"
+	}
+	checkAmount(f, "quantity", r.Quantity)
+	r.Reference, r.CreatedBy = checkText(f, r.Reference, r.CreatedBy)
+	return f
+}
+
+type AdjustmentRequest struct {
 	ProductID  int64           `json:"product_id"`
 	LocationID int64           `json:"location_id"`
-	Quantity   decimal.Decimal `json:"quantity"`
+	Quantity   decimal.Decimal `json:"quantity"` // signed
 	Reason     string          `json:"reason"`
 	Note       string          `json:"note"`
 	Reference  string          `json:"reference"`
 	CreatedBy  string          `json:"created_by"`
 }
 
-type reverseRequest struct {
+func (r *AdjustmentRequest) validate() map[string]string {
+	r.Reason = strings.TrimSpace(r.Reason)
+	r.Note = strings.TrimSpace(r.Note)
+	f := map[string]string{}
+	checkIDs(f, map[string]int64{"product_id": r.ProductID, "location_id": r.LocationID})
+	checkAmount(f, "quantity", r.Quantity.Abs())
+	if !ValidReason(r.Reason) {
+		f["reason"] = "must be one of damaged, expired, count_correction, theft, other"
+	}
+	if r.Reason == "other" && r.Note == "" {
+		f["note"] = "is required when reason is other"
+	}
+	if len(r.Note) > 1000 {
+		f["note"] = "max 1000 characters"
+	}
+	r.Reference, r.CreatedBy = checkText(f, r.Reference, r.CreatedBy)
+	return f
+}
+
+type ReverseRequest struct {
 	Note      string `json:"note"`
 	CreatedBy string `json:"created_by"`
 }
 
-func (h *MovementHandler) postIn(w http.ResponseWriter, r *http.Request) {
-	var req inRequest
-	if !readJSON(w, r, &req) {
-		return
+func (r *ReverseRequest) validate() map[string]string {
+	r.Note = strings.TrimSpace(r.Note)
+	f := map[string]string{}
+	_, r.CreatedBy = checkText(f, "", r.CreatedBy)
+	if len(r.Note) > 1000 {
+		f["note"] = "max 1000 characters"
 	}
-	fields := map[string]string{}
-	checkIDs(fields, map[string]int64{"product_id": req.ProductID, "location_id": req.LocationID})
-	checkAmount(fields, "quantity", req.Quantity)
-	checkAmount(fields, "unit_cost", req.UnitCost)
-	req.Reference, req.CreatedBy = checkText(fields, req.Reference, req.CreatedBy)
-	if len(fields) > 0 {
-		writeValidationError(w, fields)
-		return
-	}
+	return f
+}
 
-	m, err := h.ledger.PostIn(r.Context(), InInput{
-		ProductID: req.ProductID, LocationID: req.LocationID,
-		Quantity: req.Quantity, UnitCost: req.UnitCost,
-		Reference: req.Reference, CreatedBy: req.CreatedBy,
-	})
-	h.respondPosted(w, r, m, err)
+// Handlers: read JSON, validate, post, respond.
+
+func (h *MovementHandler) postIn(w http.ResponseWriter, r *http.Request) {
+	var req InRequest
+	if !readJSON(w, r, &req) || !valid(w, req.validate()) {
+		return
+	}
+	m, err := h.ledger.PostIn(r.Context(), req)
+	respondPosted(w, r, m, err)
 }
 
 func (h *MovementHandler) postOut(w http.ResponseWriter, r *http.Request) {
-	var req outRequest
-	if !readJSON(w, r, &req) {
+	var req OutRequest
+	if !readJSON(w, r, &req) || !valid(w, req.validate()) {
 		return
 	}
-	fields := map[string]string{}
-	checkIDs(fields, map[string]int64{"product_id": req.ProductID, "location_id": req.LocationID})
-	checkAmount(fields, "quantity", req.Quantity)
-	req.Reference, req.CreatedBy = checkText(fields, req.Reference, req.CreatedBy)
-	if len(fields) > 0 {
-		writeValidationError(w, fields)
-		return
-	}
-
-	m, err := h.ledger.PostOut(r.Context(), OutInput{
-		ProductID: req.ProductID, LocationID: req.LocationID, Quantity: req.Quantity,
-		Reference: req.Reference, CreatedBy: req.CreatedBy,
-	})
-	h.respondPosted(w, r, m, err)
+	m, err := h.ledger.PostOut(r.Context(), req)
+	respondPosted(w, r, m, err)
 }
 
 func (h *MovementHandler) postTransfer(w http.ResponseWriter, r *http.Request) {
-	var req transferRequest
-	if !readJSON(w, r, &req) {
+	var req TransferRequest
+	if !readJSON(w, r, &req) || !valid(w, req.validate()) {
 		return
 	}
-	fields := map[string]string{}
-	checkIDs(fields, map[string]int64{
-		"product_id": req.ProductID, "from_location_id": req.FromLocationID, "to_location_id": req.ToLocationID,
-	})
-	if req.FromLocationID != 0 && req.FromLocationID == req.ToLocationID {
-		fields["to_location_id"] = "must be different from from_location_id"
-	}
-	checkAmount(fields, "quantity", req.Quantity)
-	req.Reference, req.CreatedBy = checkText(fields, req.Reference, req.CreatedBy)
-	if len(fields) > 0 {
-		writeValidationError(w, fields)
-		return
-	}
-
-	m, err := h.ledger.PostTransfer(r.Context(), TransferInput{
-		ProductID: req.ProductID, FromLocationID: req.FromLocationID, ToLocationID: req.ToLocationID,
-		Quantity: req.Quantity, Reference: req.Reference, CreatedBy: req.CreatedBy,
-	})
-	h.respondPosted(w, r, m, err)
+	m, err := h.ledger.PostTransfer(r.Context(), req)
+	respondPosted(w, r, m, err)
 }
 
 func (h *MovementHandler) postAdjustment(w http.ResponseWriter, r *http.Request) {
-	var req adjustmentRequest
-	if !readJSON(w, r, &req) {
+	var req AdjustmentRequest
+	if !readJSON(w, r, &req) || !valid(w, req.validate()) {
 		return
 	}
-	req.Reason = strings.TrimSpace(req.Reason)
-	req.Note = strings.TrimSpace(req.Note)
-
-	fields := map[string]string{}
-	checkIDs(fields, map[string]int64{"product_id": req.ProductID, "location_id": req.LocationID})
-	checkAmount(fields, "quantity", req.Quantity.Abs())
-	if !ValidReason(req.Reason) {
-		fields["reason"] = "must be one of damaged, expired, count_correction, theft, other"
-	}
-	if req.Reason == "other" && req.Note == "" {
-		fields["note"] = "is required when reason is other"
-	}
-	if len(req.Note) > 1000 {
-		fields["note"] = "max 1000 characters"
-	}
-	req.Reference, req.CreatedBy = checkText(fields, req.Reference, req.CreatedBy)
-	if len(fields) > 0 {
-		writeValidationError(w, fields)
-		return
-	}
-
-	m, err := h.ledger.PostAdjustment(r.Context(), AdjustmentInput{
-		ProductID: req.ProductID, LocationID: req.LocationID, Quantity: req.Quantity,
-		Reason: req.Reason, Note: req.Note, Reference: req.Reference, CreatedBy: req.CreatedBy,
-	})
-	h.respondPosted(w, r, m, err)
+	m, err := h.ledger.PostAdjustment(r.Context(), req)
+	respondPosted(w, r, m, err)
 }
 
 func (h *MovementHandler) reverse(w http.ResponseWriter, r *http.Request) {
@@ -183,26 +178,100 @@ func (h *MovementHandler) reverse(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req reverseRequest
-	if !readJSON(w, r, &req) {
+	var req ReverseRequest
+	if !readJSON(w, r, &req) || !valid(w, req.validate()) {
 		return
 	}
-	req.Note = strings.TrimSpace(req.Note)
-	fields := map[string]string{}
-	_, req.CreatedBy = checkText(fields, "", req.CreatedBy)
-	if len(req.Note) > 1000 {
-		fields["note"] = "max 1000 characters"
-	}
-	if len(fields) > 0 {
-		writeValidationError(w, fields)
-		return
-	}
-
-	m, err := h.ledger.PostReversal(r.Context(), ReversalInput{MovementID: id, Note: req.Note, CreatedBy: req.CreatedBy})
-	h.respondPosted(w, r, m, err)
+	m, err := h.ledger.PostReversal(r.Context(), id, req)
+	respondPosted(w, r, m, err)
 }
 
-func (h *MovementHandler) respondPosted(w http.ResponseWriter, r *http.Request, m sqlc.Movement, err error) {
+func (h *MovementHandler) get(w http.ResponseWriter, r *http.Request) {
+	id, ok := readID(w, r)
+	if !ok {
+		return
+	}
+	d, err := h.q.GetMovementDetail(r.Context(), id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "movement not found")
+		return
+	}
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+	entries, err := h.q.ListMovementEntries(r.Context(), id)
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+
+	resp := toDetailResponse(d)
+	for _, e := range entries {
+		resp.Entries = append(resp.Entries, entryResponse{
+			LocationID: e.LocationID, QuantityDelta: toDecimal(e.QuantityDelta), UnitCost: numPtr(e.UnitCost),
+		})
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// list supports filters: product_id, location_id, type, reference, from, to (dates or RFC 3339), page, page_size.
+func (h *MovementHandler) list(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	fields := map[string]string{}
+	f := sqlc.CountMovementHistoryParams{
+		ProductID:  optionalID(fields, query, "product_id"),
+		LocationID: optionalID(fields, query, "location_id"),
+		FromDate:   optionalTime(fields, query, "from", false),
+		ToDate:     optionalTime(fields, query, "to", true),
+	}
+	if t := strings.ToUpper(query.Get("type")); t != "" {
+		switch t {
+		case "IN", "OUT", "TRANSFER", "ADJUSTMENT", "REVERSAL":
+			f.MovementType = pgtype.Text{String: t, Valid: true}
+		default:
+			fields["type"] = "must be one of IN, OUT, TRANSFER, ADJUSTMENT, REVERSAL"
+		}
+	}
+	if ref := strings.TrimSpace(query.Get("reference")); ref != "" {
+		f.Reference = pgtype.Text{String: ref, Valid: true}
+	}
+	if !valid(w, fields) {
+		return
+	}
+
+	page, size := pageParams(query.Get("page"), query.Get("page_size"))
+	rows, err := h.q.ListMovementHistory(r.Context(), sqlc.ListMovementHistoryParams{
+		ProductID: f.ProductID, MovementType: f.MovementType, LocationID: f.LocationID,
+		Reference: f.Reference, FromDate: f.FromDate, ToDate: f.ToDate,
+		PageSize: int32(size), PageOffset: int32((page - 1) * size),
+	})
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+	total, err := h.q.CountMovementHistory(r.Context(), f)
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+
+	data := make([]movementDetailResponse, len(rows))
+	for i, row := range rows {
+		data[i] = toDetailResponse(sqlc.GetMovementDetailRow(row)) // same columns, same struct shape
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": data, "page": page, "page_size": size, "total": total})
+}
+
+func valid(w http.ResponseWriter, fields map[string]string) bool {
+	if len(fields) > 0 {
+		writeValidationError(w, fields)
+		return false
+	}
+	return true
+}
+
+func respondPosted(w http.ResponseWriter, r *http.Request, m sqlc.Movement, err error) {
 	if err != nil {
 		writePostingError(w, r, err)
 		return
@@ -241,6 +310,8 @@ func writePostingError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	slog.Warn("movement rejected", "path", r.URL.Path, "reason", err.Error())
 }
+
+// Responses
 
 type movementResponse struct {
 	ID                 int64            `json:"id"`
@@ -301,27 +372,8 @@ func toMovementResponse(m sqlc.Movement) movementResponse {
 	return resp
 }
 
-func (h *MovementHandler) get(w http.ResponseWriter, r *http.Request) {
-	id, ok := readID(w, r)
-	if !ok {
-		return
-	}
-	d, err := h.q.GetMovementDetail(r.Context(), id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "movement not found")
-		return
-	}
-	if err != nil {
-		writeInternalError(w, err)
-		return
-	}
-	entries, err := h.q.ListMovementEntries(r.Context(), id)
-	if err != nil {
-		writeInternalError(w, err)
-		return
-	}
-
-	resp := movementDetailResponse{
+func toDetailResponse(d sqlc.GetMovementDetailRow) movementDetailResponse {
+	return movementDetailResponse{
 		movementResponse: toMovementResponse(sqlc.Movement{
 			ID: d.ID, ProductID: d.ProductID, MovementType: d.MovementType,
 			FromLocationID: d.FromLocationID, ToLocationID: d.ToLocationID,
@@ -329,76 +381,14 @@ func (h *MovementHandler) get(w http.ResponseWriter, r *http.Request) {
 			Reason: d.Reason, Note: d.Note, CreatedBy: d.CreatedBy,
 			ReversalOfID: d.ReversalOfID, CreatedAt: d.CreatedAt,
 		}),
-		SKU: d.Sku, ProductName: d.ProductName, Unit: d.Unit,
-		FromLocationCode: textPtr(d.FromLocationCode), ToLocationCode: textPtr(d.ToLocationCode),
-		IsReversed: d.IsReversed, ReversedByID: idPtr(d.ReversedByID),
+		SKU:              d.Sku,
+		ProductName:      d.ProductName,
+		Unit:             d.Unit,
+		FromLocationCode: textPtr(d.FromLocationCode),
+		ToLocationCode:   textPtr(d.ToLocationCode),
+		IsReversed:       d.IsReversed,
+		ReversedByID:     idPtr(d.ReversedByID),
 	}
-	for _, e := range entries {
-		resp.Entries = append(resp.Entries, entryResponse{
-			LocationID: e.LocationID, QuantityDelta: toDecimal(e.QuantityDelta), UnitCost: numPtr(e.UnitCost),
-		})
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
-// list supports filters: product_id, location_id, type, reference, from, to (dates or RFC 3339), page, page_size.
-func (h *MovementHandler) list(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	fields := map[string]string{}
-	f := sqlc.CountMovementHistoryParams{
-		ProductID:  optionalID(fields, query, "product_id"),
-		LocationID: optionalID(fields, query, "location_id"),
-		FromDate:   optionalTime(fields, query, "from", false),
-		ToDate:     optionalTime(fields, query, "to", true),
-	}
-	if t := strings.ToUpper(query.Get("type")); t != "" {
-		switch t {
-		case "IN", "OUT", "TRANSFER", "ADJUSTMENT", "REVERSAL":
-			f.MovementType = pgtype.Text{String: t, Valid: true}
-		default:
-			fields["type"] = "must be one of IN, OUT, TRANSFER, ADJUSTMENT, REVERSAL"
-		}
-	}
-	if ref := strings.TrimSpace(query.Get("reference")); ref != "" {
-		f.Reference = pgtype.Text{String: ref, Valid: true}
-	}
-	if len(fields) > 0 {
-		writeValidationError(w, fields)
-		return
-	}
-
-	page, size := pageParams(query.Get("page"), query.Get("page_size"))
-	rows, err := h.q.ListMovementHistory(r.Context(), sqlc.ListMovementHistoryParams{
-		ProductID: f.ProductID, MovementType: f.MovementType, LocationID: f.LocationID,
-		Reference: f.Reference, FromDate: f.FromDate, ToDate: f.ToDate,
-		PageSize: int32(size), PageOffset: int32((page - 1) * size),
-	})
-	if err != nil {
-		writeInternalError(w, err)
-		return
-	}
-	total, err := h.q.CountMovementHistory(r.Context(), f)
-	if err != nil {
-		writeInternalError(w, err)
-		return
-	}
-
-	data := make([]movementDetailResponse, len(rows))
-	for i, d := range rows {
-		data[i] = movementDetailResponse{
-			movementResponse: toMovementResponse(sqlc.Movement{
-				ID: d.ID, ProductID: d.ProductID, MovementType: d.MovementType,
-				FromLocationID: d.FromLocationID, ToLocationID: d.ToLocationID,
-				Quantity: d.Quantity, UnitCost: d.UnitCost, Reference: d.Reference,
-				Reason: d.Reason, Note: d.Note, CreatedBy: d.CreatedBy,
-				ReversalOfID: d.ReversalOfID, CreatedAt: d.CreatedAt,
-			}),
-			SKU: d.Sku, ProductName: d.ProductName, Unit: d.Unit,
-			FromLocationCode: textPtr(d.FromLocationCode), ToLocationCode: textPtr(d.ToLocationCode),
-			IsReversed: d.IsReversed, ReversedByID: idPtr(d.ReversedByID),
-		}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": data, "page": page, "page_size": size, "total": total})
 }
 
 func checkIDs(fields map[string]string, ids map[string]int64) {
@@ -426,84 +416,4 @@ func checkText(fields map[string]string, reference, createdBy string) (string, s
 		fields["created_by"] = "is required, max 128 characters"
 	}
 	return reference, createdBy
-}
-
-func optionalID(fields map[string]string, query map[string][]string, name string) pgtype.Int8 {
-	raw := ""
-	if v := query[name]; len(v) > 0 {
-		raw = v[0]
-	}
-	if raw == "" {
-		return pgtype.Int8{}
-	}
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id < 1 {
-		fields[name] = "must be a positive integer"
-		return pgtype.Int8{}
-	}
-	return pgtype.Int8{Int64: id, Valid: true}
-}
-
-// optionalTime accepts 2006-01-02 or RFC 3339. A plain date used as the upper
-// bound includes that whole day.
-func optionalTime(fields map[string]string, query map[string][]string, name string, upper bool) pgtype.Timestamptz {
-	raw := ""
-	if v := query[name]; len(v) > 0 {
-		raw = v[0]
-	}
-	if raw == "" {
-		return pgtype.Timestamptz{}
-	}
-	if t, err := time.Parse(time.RFC3339, raw); err == nil {
-		return pgtype.Timestamptz{Time: t, Valid: true}
-	}
-	t, err := time.ParseInLocation("2006-01-02", raw, ist)
-	if err != nil {
-		fields[name] = "must be a date (2006-01-02) or RFC 3339 timestamp"
-		return pgtype.Timestamptz{}
-	}
-	if upper {
-		t = t.AddDate(0, 0, 1)
-	}
-	return pgtype.Timestamptz{Time: t, Valid: true}
-}
-
-// Plain dates in filters are read as Indian Standard Time, the business's local day.
-var ist = time.FixedZone("IST", 5*3600+1800)
-
-func pageParams(pageRaw, sizeRaw string) (int, int) {
-	page, err := strconv.Atoi(pageRaw)
-	if err != nil || page < 1 {
-		page = 1
-	}
-	size, err := strconv.Atoi(sizeRaw)
-	if err != nil || size < 1 {
-		size = 20
-	}
-	if size > 100 {
-		size = 100
-	}
-	return page, size
-}
-
-func idPtr(v pgtype.Int8) *int64 {
-	if !v.Valid {
-		return nil
-	}
-	return &v.Int64
-}
-
-func numPtr(v pgtype.Numeric) *decimal.Decimal {
-	if !v.Valid {
-		return nil
-	}
-	d := toDecimal(v)
-	return &d
-}
-
-func textPtr(v pgtype.Text) *string {
-	if !v.Valid {
-		return nil
-	}
-	return &v.String
 }

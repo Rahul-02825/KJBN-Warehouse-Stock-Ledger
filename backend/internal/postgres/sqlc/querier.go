@@ -18,8 +18,6 @@ type Querier interface {
 	CreateMovement(ctx context.Context, arg CreateMovementParams) (Movement, error)
 	CreateMovementEntry(ctx context.Context, arg CreateMovementEntryParams) (MovementEntry, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
-	// Writes the exact inverse of the original's entries under the new movement.
-	CreateReversalEntries(ctx context.Context, arg CreateReversalEntriesParams) (int64, error)
 	// Conditional decrement: zero rows affected means insufficient stock.
 	DecreaseStockBalanceIfAvailable(ctx context.Context, arg DecreaseStockBalanceIfAvailableParams) (int64, error)
 	// Transaction helpers --------------------------------------------------------
