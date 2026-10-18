@@ -70,3 +70,10 @@ func TestLocationLifecycle(t *testing.T) {
 		t.Fatalf("missing: status = %d, want 404", status)
 	}
 }
+
+func TestHealth_DatabaseUp(t *testing.T) {
+	status, body := send(t, routerWithDB(t), "GET", "/healthz", "")
+	if status != http.StatusOK || body["status"] != "ok" {
+		t.Fatalf("got %d %v, want 200 ok", status, body)
+	}
+}

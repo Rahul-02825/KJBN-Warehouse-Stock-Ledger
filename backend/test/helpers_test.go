@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/api"
-	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
 // send makes a request to the handler and returns the status code and decoded JSON body.
@@ -36,12 +35,18 @@ func errorCode(body map[string]any) string {
 
 // routerWithoutDB is enough for requests that are rejected before any query runs.
 func routerWithoutDB() http.Handler {
-	return api.NewRouter(sqlc.New(nil))
+	return api.NewRouter(nil)
 }
 
-// routerWithDB connects to TEST_DATABASE_URL and empties all tables first.
-// The test is skipped when the variable is not set.
+// routerWithDB returns the full router on an emptied test database.
 func routerWithDB(t *testing.T) http.Handler {
+	t.Helper()
+	return api.NewRouter(testDB(t))
+}
+
+// testDB connects to TEST_DATABASE_URL and empties all tables first.
+// The test is skipped when the variable is not set.
+func testDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
@@ -62,5 +67,31 @@ func routerWithDB(t *testing.T) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return api.NewRouter(sqlc.New(pool))
+	return pool
+}
+
+// mustSend fails the test unless the response has the wanted status.
+func mustSend(t *testing.T, h http.Handler, want int, method, path, body string) map[string]any {
+	t.Helper()
+	status, out := send(t, h, method, path, body)
+	if status != want {
+		t.Fatalf("%s %s: status %d, want %d, body %v", method, path, status, want, out)
+	}
+	return out
+}
+
+// assertLedgerMatchesCache checks that every cached balance equals the sum of its ledger entries.
+func assertLedgerMatchesCache(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	var drift int
+	err := pool.QueryRow(context.Background(), `
+		WITH lt AS (SELECT product_id, location_id, SUM(quantity_delta) q FROM movement_entries GROUP BY 1, 2)
+		SELECT count(*) FROM stock_balances sb FULL JOIN lt USING (product_id, location_id)
+		WHERE COALESCE(sb.quantity, 0) <> COALESCE(lt.q, 0)`).Scan(&drift)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if drift != 0 {
+		t.Fatalf("%d balances differ from the ledger", drift)
+	}
 }

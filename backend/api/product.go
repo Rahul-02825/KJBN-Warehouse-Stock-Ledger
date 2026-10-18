@@ -126,17 +126,7 @@ func (h *ProductHandler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) list(w http.ResponseWriter, r *http.Request) {
-	page, err1 := strconv.Atoi(r.URL.Query().Get("page"))
-	size, err2 := strconv.Atoi(r.URL.Query().Get("page_size"))
-	if err1 != nil || page < 1 {
-		page = 1
-	}
-	if err2 != nil || size < 1 {
-		size = 20
-	}
-	if size > 100 {
-		size = 100
-	}
+	page, size := pageParams(r.URL.Query().Get("page"), r.URL.Query().Get("page_size"))
 
 	searchText := strings.TrimSpace(r.URL.Query().Get("search"))
 	search := pgtype.Text{String: searchText, Valid: searchText != ""}
@@ -239,9 +229,13 @@ func CheckReorderLevel(d decimal.Decimal, unit string) string {
 }
 
 func readID(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	return readPathID(w, r, "id")
+}
+
+func readPathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
+	id, err := strconv.ParseInt(r.PathValue(name), 10, 64)
 	if err != nil || id < 1 {
-		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "id must be a positive integer")
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", name+" must be a positive integer")
 		return 0, false
 	}
 	return id, true

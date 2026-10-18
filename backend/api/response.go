@@ -5,6 +5,9 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -15,6 +18,7 @@ type errorBody struct {
 	Code    string            `json:"code"`
 	Message string            `json:"message"`
 	Fields  map[string]string `json:"fields,omitempty"`
+	Details map[string]string `json:"details,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -64,4 +68,78 @@ func toDecimal(n pgtype.Numeric) decimal.Decimal {
 		return decimal.Zero
 	}
 	return decimal.NewFromBigInt(n.Int, n.Exp)
+}
+
+func pageParams(pageRaw, sizeRaw string) (int, int) {
+	page, err := strconv.Atoi(pageRaw)
+	if err != nil || page < 1 {
+		page = 1
+	}
+	size, err := strconv.Atoi(sizeRaw)
+	if err != nil || size < 1 {
+		size = 20
+	}
+	if size > 100 {
+		size = 100
+	}
+	return page, size
+}
+
+func optionalID(fields map[string]string, query url.Values, name string) pgtype.Int8 {
+	raw := query.Get(name)
+	if raw == "" {
+		return pgtype.Int8{}
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id < 1 {
+		fields[name] = "must be a positive integer"
+		return pgtype.Int8{}
+	}
+	return pgtype.Int8{Int64: id, Valid: true}
+}
+
+// Plain dates in filters are read as Indian Standard Time, the business's local day.
+var ist = time.FixedZone("IST", 5*3600+1800)
+
+// optionalTime accepts 2006-01-02 or RFC 3339. A plain date used as the upper
+// bound includes that whole day.
+func optionalTime(fields map[string]string, query url.Values, name string, upper bool) pgtype.Timestamptz {
+	raw := query.Get(name)
+	if raw == "" {
+		return pgtype.Timestamptz{}
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return pgtype.Timestamptz{Time: t, Valid: true}
+	}
+	t, err := time.ParseInLocation("2006-01-02", raw, ist)
+	if err != nil {
+		fields[name] = "must be a date (2006-01-02) or RFC 3339 timestamp"
+		return pgtype.Timestamptz{}
+	}
+	if upper {
+		t = t.AddDate(0, 0, 1)
+	}
+	return pgtype.Timestamptz{Time: t, Valid: true}
+}
+
+func idPtr(v pgtype.Int8) *int64 {
+	if !v.Valid {
+		return nil
+	}
+	return &v.Int64
+}
+
+func numPtr(v pgtype.Numeric) *decimal.Decimal {
+	if !v.Valid {
+		return nil
+	}
+	d := toDecimal(v)
+	return &d
+}
+
+func textPtr(v pgtype.Text) *string {
+	if !v.Valid {
+		return nil
+	}
+	return &v.String
 }

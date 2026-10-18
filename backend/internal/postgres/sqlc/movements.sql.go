@@ -197,7 +197,7 @@ SELECT
     fl.code AS from_location_code,
     tl.code AS to_location_code,
     rev.id  AS reversed_by_id,
-    (rev.id IS NOT NULL) AS is_reversed
+    (rev.id IS NOT NULL)::BOOLEAN AS is_reversed
 FROM movements m
 JOIN products p ON p.id = m.product_id
 LEFT JOIN locations fl ON fl.id = m.from_location_id
@@ -226,7 +226,7 @@ type GetMovementDetailRow struct {
 	FromLocationCode pgtype.Text        `json:"from_location_code"`
 	ToLocationCode   pgtype.Text        `json:"to_location_code"`
 	ReversedByID     pgtype.Int8        `json:"reversed_by_id"`
-	IsReversed       interface{}        `json:"is_reversed"`
+	IsReversed       bool               `json:"is_reversed"`
 }
 
 // Single movement with display names and reversal status.
@@ -347,84 +347,6 @@ func (q *Queries) GetProductLedger(ctx context.Context, productID int64) ([]GetP
 	return items, nil
 }
 
-const getProductLocationLedger = `-- name: GetProductLocationLedger :many
-SELECT
-    e.id AS entry_id,
-    m.id AS movement_id,
-    m.created_at,
-    m.movement_type,
-    m.reference,
-    m.reason,
-    m.note,
-    m.created_by,
-    m.reversal_of_id,
-    e.quantity_delta,
-    e.unit_cost,
-    SUM(e.quantity_delta) OVER (
-        ORDER BY m.created_at, m.id, e.id
-        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    )::NUMERIC(18, 4) AS running_balance
-FROM movement_entries e
-JOIN movements m ON m.id = e.movement_id
-WHERE e.product_id = $1
-  AND e.location_id = $2
-ORDER BY m.created_at, m.id, e.id
-`
-
-type GetProductLocationLedgerParams struct {
-	ProductID  int64 `json:"product_id"`
-	LocationID int64 `json:"location_id"`
-}
-
-type GetProductLocationLedgerRow struct {
-	EntryID        int64              `json:"entry_id"`
-	MovementID     int64              `json:"movement_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	MovementType   string             `json:"movement_type"`
-	Reference      string             `json:"reference"`
-	Reason         pgtype.Text        `json:"reason"`
-	Note           string             `json:"note"`
-	CreatedBy      string             `json:"created_by"`
-	ReversalOfID   pgtype.Int8        `json:"reversal_of_id"`
-	QuantityDelta  pgtype.Numeric     `json:"quantity_delta"`
-	UnitCost       pgtype.Numeric     `json:"unit_cost"`
-	RunningBalance pgtype.Numeric     `json:"running_balance"`
-}
-
-// Ledger restricted to one bin.
-func (q *Queries) GetProductLocationLedger(ctx context.Context, arg GetProductLocationLedgerParams) ([]GetProductLocationLedgerRow, error) {
-	rows, err := q.db.Query(ctx, getProductLocationLedger, arg.ProductID, arg.LocationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetProductLocationLedgerRow{}
-	for rows.Next() {
-		var i GetProductLocationLedgerRow
-		if err := rows.Scan(
-			&i.EntryID,
-			&i.MovementID,
-			&i.CreatedAt,
-			&i.MovementType,
-			&i.Reference,
-			&i.Reason,
-			&i.Note,
-			&i.CreatedBy,
-			&i.ReversalOfID,
-			&i.QuantityDelta,
-			&i.UnitCost,
-			&i.RunningBalance,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listMovementEntries = `-- name: ListMovementEntries :many
 SELECT id, movement_id, product_id, location_id, quantity_delta, unit_cost, created_at
 FROM movement_entries
@@ -469,7 +391,7 @@ SELECT
     fl.code AS from_location_code,
     tl.code AS to_location_code,
     rev.id  AS reversed_by_id,
-    (rev.id IS NOT NULL) AS is_reversed
+    (rev.id IS NOT NULL)::BOOLEAN AS is_reversed
 FROM movements m
 JOIN products p ON p.id = m.product_id
 LEFT JOIN locations fl ON fl.id = m.from_location_id
@@ -524,7 +446,7 @@ type ListMovementHistoryRow struct {
 	FromLocationCode pgtype.Text        `json:"from_location_code"`
 	ToLocationCode   pgtype.Text        `json:"to_location_code"`
 	ReversedByID     pgtype.Int8        `json:"reversed_by_id"`
-	IsReversed       interface{}        `json:"is_reversed"`
+	IsReversed       bool               `json:"is_reversed"`
 }
 
 // History with optional filters and offset pagination.
