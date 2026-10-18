@@ -66,6 +66,9 @@ type Querier interface {
 	// Reconciliation: recompute every (product, location) balance from the ledger
 	// and compare with the cache. Covers cells present on either side. Read-only.
 	ListReconciliation(ctx context.Context, onlyDrift bool) ([]ListReconciliationRow, error)
+	// Stock as it was at a point in time, rebuilt from the ledger.
+	// Only cells with a non-zero balance at that time are returned.
+	ListStockAsOf(ctx context.Context, arg ListStockAsOfParams) ([]ListStockAsOfRow, error)
 	// Full grid: every product x every location, zero where no balance row.
 	ListStockOverview(ctx context.Context) ([]ListStockOverviewRow, error)
 	// Lock the original so two concurrent reversal attempts serialise; the

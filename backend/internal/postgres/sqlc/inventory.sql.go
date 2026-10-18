@@ -248,6 +248,74 @@ func (q *Queries) ListProductBalances(ctx context.Context, productID int64) ([]L
 	return items, nil
 }
 
+const listStockAsOf = `-- name: ListStockAsOf :many
+SELECT
+    p.id AS product_id,
+    p.sku,
+    p.name AS product_name,
+    p.unit,
+    l.id AS location_id,
+    l.code AS location_code,
+    SUM(e.quantity_delta)::NUMERIC(18, 4) AS quantity
+FROM movement_entries e
+JOIN products p ON p.id = e.product_id
+JOIN locations l ON l.id = e.location_id
+WHERE e.created_at < $1
+  AND ($2::BIGINT IS NULL
+       OR e.product_id = $2)
+  AND ($3::BIGINT IS NULL
+       OR e.location_id = $3)
+GROUP BY p.id, l.id
+HAVING SUM(e.quantity_delta) <> 0
+ORDER BY p.name, p.id, l.code
+`
+
+type ListStockAsOfParams struct {
+	AsOf       pgtype.Timestamptz `json:"as_of"`
+	ProductID  pgtype.Int8        `json:"product_id"`
+	LocationID pgtype.Int8        `json:"location_id"`
+}
+
+type ListStockAsOfRow struct {
+	ProductID    int64          `json:"product_id"`
+	Sku          string         `json:"sku"`
+	ProductName  string         `json:"product_name"`
+	Unit         string         `json:"unit"`
+	LocationID   int64          `json:"location_id"`
+	LocationCode string         `json:"location_code"`
+	Quantity     pgtype.Numeric `json:"quantity"`
+}
+
+// Stock as it was at a point in time, rebuilt from the ledger.
+// Only cells with a non-zero balance at that time are returned.
+func (q *Queries) ListStockAsOf(ctx context.Context, arg ListStockAsOfParams) ([]ListStockAsOfRow, error) {
+	rows, err := q.db.Query(ctx, listStockAsOf, arg.AsOf, arg.ProductID, arg.LocationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStockAsOfRow{}
+	for rows.Next() {
+		var i ListStockAsOfRow
+		if err := rows.Scan(
+			&i.ProductID,
+			&i.Sku,
+			&i.ProductName,
+			&i.Unit,
+			&i.LocationID,
+			&i.LocationCode,
+			&i.Quantity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStockOverview = `-- name: ListStockOverview :many
 SELECT
     p.id AS product_id,
