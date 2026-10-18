@@ -29,6 +29,7 @@ func (h *ReportHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/reports/cost-check", h.costCheck)
 	mux.HandleFunc("GET /api/reports/daily-activity", h.dailyActivity)
 	mux.HandleFunc("GET /api/reports/top-movers", h.topMovers)
+	mux.HandleFunc("GET /api/reports/season-forecast", h.seasonForecast)
 	mux.HandleFunc("GET /api/products/{id}/ledger", h.ledger)
 }
 
@@ -361,6 +362,58 @@ func (h *ReportHandler) topMovers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data, "since": since})
+}
+
+type forecastRow struct {
+	ProductID      int64           `json:"product_id"`
+	SKU            string          `json:"sku"`
+	Name           string          `json:"name"`
+	Unit           string          `json:"unit"`
+	LastYearDemand decimal.Decimal `json:"last_year_demand"`
+	CurrentStock   decimal.Decimal `json:"current_stock"`
+	Gap            decimal.Decimal `json:"gap"`
+	AverageCost    decimal.Decimal `json:"average_cost"`
+	GapValue       decimal.Decimal `json:"gap_value"`
+}
+
+// seasonForecast compares current stock with what was shipped in the same
+// ?days=30 window last year, so stock can be bought before the season starts.
+func (h *ReportHandler) seasonForecast(w http.ResponseWriter, r *http.Request) {
+	fields := map[string]string{}
+	days := intParam(fields, r.URL.Query(), "days", 30, 1, 180)
+	if !valid(w, fields) {
+		return
+	}
+	start := time.Now().AddDate(-1, 0, 0)
+	end := start.AddDate(0, 0, days)
+
+	rows, err := h.q.ListSeasonForecast(r.Context(), sqlc.ListSeasonForecastParams{
+		WindowStart: pgtype.Timestamptz{Time: start, Valid: true},
+		WindowEnd:   pgtype.Timestamptz{Time: end, Valid: true},
+	})
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+	data := make([]forecastRow, len(rows))
+	for i, p := range rows {
+		data[i] = forecastRow{
+			ProductID:      p.ProductID,
+			SKU:            p.Sku,
+			Name:           p.Name,
+			Unit:           p.Unit,
+			LastYearDemand: toDecimal(p.LastYearDemand),
+			CurrentStock:   toDecimal(p.CurrentStock),
+			Gap:            toDecimal(p.Gap),
+			AverageCost:    toDecimal(p.AverageCost),
+			GapValue:       toDecimal(p.GapValue),
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"window_start": start.UTC(),
+		"window_end":   end.UTC(),
+		"data":         data,
+	})
 }
 
 // intParam reads an optional whole-number query value within [min, max].

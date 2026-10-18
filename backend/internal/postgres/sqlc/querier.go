@@ -72,6 +72,9 @@ type Querier interface {
 	// Reconciliation: recompute every (product, location) balance from the ledger
 	// and compare with the cache. Covers cells present on either side. Read-only.
 	ListReconciliation(ctx context.Context, onlyDrift bool) ([]ListReconciliationRow, error)
+	// Products whose current stock is below what was shipped in the same window last year.
+	// Reversed shipments are not demand. Products with no shipments in that window are left out.
+	ListSeasonForecast(ctx context.Context, arg ListSeasonForecastParams) ([]ListSeasonForecastRow, error)
 	// Stock as it was at a point in time, rebuilt from the ledger.
 	// Only cells with a non-zero balance at that time are returned.
 	ListStockAsOf(ctx context.Context, arg ListStockAsOfParams) ([]ListStockAsOfRow, error)

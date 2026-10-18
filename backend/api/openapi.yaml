@@ -364,6 +364,20 @@ paths:
         '200': { $ref: '#/components/responses/Object' }
         '400': { $ref: '#/components/responses/Error' }
 
+  /api/reports/season-forecast:
+    get:
+      tags: [Reports]
+      summary: Products with less stock than was shipped in the same window last year
+      description: |
+        Compares current stock with OUT quantities (reversed ones excluded) from the
+        same `days` window one year ago. Only products short of last year's demand are
+        listed, largest gap value (gap x average cost) first.
+      parameters:
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 180, default: 30 } }
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+        '400': { $ref: '#/components/responses/Error' }
+
   /healthz:
     get:
       tags: [Health]
