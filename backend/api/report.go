@@ -38,6 +38,7 @@ type lowStockRow struct {
 }
 
 // lowStock lists products whose total stock across all bins is at or below the reorder level.
+// ?format=csv downloads it as a spreadsheet.
 func (h *ReportHandler) lowStock(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.q.ListLowStockProducts(r.Context())
 	if err != nil {
@@ -56,6 +57,14 @@ func (h *ReportHandler) lowStock(w http.ResponseWriter, r *http.Request) {
 			Shortfall:     toDecimal(p.Shortfall),
 		}
 	}
+	if r.URL.Query().Get("format") == "csv" {
+		rows := make([][]string, len(data))
+		for i, p := range data {
+			rows[i] = []string{p.SKU, csvText(p.Name), p.Unit, p.ReorderLevel.String(), p.TotalQuantity.String(), p.Shortfall.String()}
+		}
+		writeCSV(w, "low-stock.csv", []string{"sku", "name", "unit", "reorder_level", "total_quantity", "shortfall"}, rows)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})
 }
 
@@ -70,6 +79,7 @@ type valuationRow struct {
 }
 
 // valuation is quantity x average cost per product, plus the grand total.
+// ?format=csv downloads it as a spreadsheet.
 func (h *ReportHandler) valuation(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.q.GetInventoryValuation(r.Context())
 	if err != nil {
@@ -89,6 +99,15 @@ func (h *ReportHandler) valuation(w http.ResponseWriter, r *http.Request) {
 			TotalValue:    toDecimal(p.TotalValue),
 		}
 		total = total.Add(data[i].TotalValue)
+	}
+	if r.URL.Query().Get("format") == "csv" {
+		rows := make([][]string, len(data))
+		for i, p := range data {
+			rows[i] = []string{p.SKU, csvText(p.Name), p.Unit, p.TotalQuantity.String(), p.AverageCost.String(), p.TotalValue.String()}
+		}
+		rows = append(rows, []string{"TOTAL", "", "", "", "", total.String()})
+		writeCSV(w, "valuation.csv", []string{"sku", "name", "unit", "total_quantity", "average_cost", "total_value"}, rows)
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data, "total_value": total})
 }
