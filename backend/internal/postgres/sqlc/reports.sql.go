@@ -11,6 +11,70 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getDailyActivity = `-- name: GetDailyActivity :many
+WITH days AS (
+    SELECT generate_series(
+        (NOW() AT TIME ZONE 'Asia/Kolkata')::DATE - ($1::INT - 1),
+        (NOW() AT TIME ZONE 'Asia/Kolkata')::DATE,
+        INTERVAL '1 day'
+    )::DATE AS day
+)
+SELECT
+    d.day,
+    COUNT(m.id) FILTER (WHERE m.movement_type = 'IN') AS in_count,
+    COUNT(m.id) FILTER (WHERE m.movement_type = 'OUT') AS out_count,
+    COUNT(m.id) FILTER (WHERE m.movement_type = 'TRANSFER') AS transfer_count,
+    COUNT(m.id) FILTER (WHERE m.movement_type = 'ADJUSTMENT') AS adjustment_count,
+    COUNT(m.id) FILTER (WHERE m.movement_type = 'REVERSAL') AS reversal_count,
+    COALESCE(SUM(m.quantity * m.unit_cost) FILTER (WHERE m.movement_type = 'IN'), 0)::NUMERIC(24, 4) AS in_value,
+    COALESCE(SUM(m.quantity * m.unit_cost) FILTER (WHERE m.movement_type = 'OUT'), 0)::NUMERIC(24, 4) AS out_value
+FROM days d
+LEFT JOIN movements m ON (m.created_at AT TIME ZONE 'Asia/Kolkata')::DATE = d.day
+GROUP BY d.day
+ORDER BY d.day
+`
+
+type GetDailyActivityRow struct {
+	Day             pgtype.Date    `json:"day"`
+	InCount         int64          `json:"in_count"`
+	OutCount        int64          `json:"out_count"`
+	TransferCount   int64          `json:"transfer_count"`
+	AdjustmentCount int64          `json:"adjustment_count"`
+	ReversalCount   int64          `json:"reversal_count"`
+	InValue         pgtype.Numeric `json:"in_value"`
+	OutValue        pgtype.Numeric `json:"out_value"`
+}
+
+// Postings per day (Indian Standard Time) for the last N days, including days with none.
+func (q *Queries) GetDailyActivity(ctx context.Context, days int32) ([]GetDailyActivityRow, error) {
+	rows, err := q.db.Query(ctx, getDailyActivity, days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetDailyActivityRow{}
+	for rows.Next() {
+		var i GetDailyActivityRow
+		if err := rows.Scan(
+			&i.Day,
+			&i.InCount,
+			&i.OutCount,
+			&i.TransferCount,
+			&i.AdjustmentCount,
+			&i.ReversalCount,
+			&i.InValue,
+			&i.OutValue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getInventoryValuation = `-- name: GetInventoryValuation :many
 SELECT
     p.id AS product_id,
@@ -189,6 +253,69 @@ func (q *Queries) ListReconciliation(ctx context.Context, onlyDrift bool) ([]Lis
 			&i.CachedQuantity,
 			&i.LedgerQuantity,
 			&i.Difference,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTopMovers = `-- name: ListTopMovers :many
+SELECT
+    p.id AS product_id,
+    p.sku,
+    p.name,
+    p.unit,
+    COUNT(*) AS shipments,
+    SUM(m.quantity)::NUMERIC(18, 4) AS shipped_quantity,
+    SUM(m.quantity * m.unit_cost)::NUMERIC(24, 4) AS shipped_value
+FROM movements m
+JOIN products p ON p.id = m.product_id
+WHERE m.movement_type = 'OUT'
+  AND m.created_at >= $1
+  AND NOT EXISTS (SELECT 1 FROM movements r WHERE r.reversal_of_id = m.id)
+GROUP BY p.id
+ORDER BY shipped_value DESC, p.name
+LIMIT $2
+`
+
+type ListTopMoversParams struct {
+	Since   pgtype.Timestamptz `json:"since"`
+	MaxRows int32              `json:"max_rows"`
+}
+
+type ListTopMoversRow struct {
+	ProductID       int64          `json:"product_id"`
+	Sku             string         `json:"sku"`
+	Name            string         `json:"name"`
+	Unit            string         `json:"unit"`
+	Shipments       int64          `json:"shipments"`
+	ShippedQuantity pgtype.Numeric `json:"shipped_quantity"`
+	ShippedValue    pgtype.Numeric `json:"shipped_value"`
+}
+
+// Products ranked by value shipped since a time. Reversed shipments are left out.
+func (q *Queries) ListTopMovers(ctx context.Context, arg ListTopMoversParams) ([]ListTopMoversRow, error) {
+	rows, err := q.db.Query(ctx, listTopMovers, arg.Since, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTopMoversRow{}
+	for rows.Next() {
+		var i ListTopMoversRow
+		if err := rows.Scan(
+			&i.ProductID,
+			&i.Sku,
+			&i.Name,
+			&i.Unit,
+			&i.Shipments,
+			&i.ShippedQuantity,
+			&i.ShippedValue,
 		); err != nil {
 			return nil, err
 		}

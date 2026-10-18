@@ -3,9 +3,12 @@ package api
 import (
 	"errors"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
@@ -24,6 +27,8 @@ func (h *ReportHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/reports/valuation", h.valuation)
 	mux.HandleFunc("GET /api/reports/reconciliation", h.reconciliation)
 	mux.HandleFunc("GET /api/reports/cost-check", h.costCheck)
+	mux.HandleFunc("GET /api/reports/daily-activity", h.dailyActivity)
+	mux.HandleFunc("GET /api/reports/top-movers", h.topMovers)
 	mux.HandleFunc("GET /api/products/{id}/ledger", h.ledger)
 }
 
@@ -273,4 +278,101 @@ func (h *ReportHandler) costCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data, "mismatch_count": mismatches})
+}
+
+type activityRow struct {
+	Day             string          `json:"day"`
+	InCount         int64           `json:"in_count"`
+	OutCount        int64           `json:"out_count"`
+	TransferCount   int64           `json:"transfer_count"`
+	AdjustmentCount int64           `json:"adjustment_count"`
+	ReversalCount   int64           `json:"reversal_count"`
+	InValue         decimal.Decimal `json:"in_value"`
+	OutValue        decimal.Decimal `json:"out_value"`
+}
+
+// dailyActivity counts postings per day for the dashboard chart. ?days=30 (1 to 365).
+func (h *ReportHandler) dailyActivity(w http.ResponseWriter, r *http.Request) {
+	fields := map[string]string{}
+	days := intParam(fields, r.URL.Query(), "days", 30, 1, 365)
+	if !valid(w, fields) {
+		return
+	}
+	rows, err := h.q.GetDailyActivity(r.Context(), int32(days))
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+	data := make([]activityRow, len(rows))
+	for i, d := range rows {
+		data[i] = activityRow{
+			Day:             d.Day.Time.Format("2006-01-02"),
+			InCount:         d.InCount,
+			OutCount:        d.OutCount,
+			TransferCount:   d.TransferCount,
+			AdjustmentCount: d.AdjustmentCount,
+			ReversalCount:   d.ReversalCount,
+			InValue:         toDecimal(d.InValue),
+			OutValue:        toDecimal(d.OutValue),
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": data})
+}
+
+type topMoverRow struct {
+	ProductID       int64           `json:"product_id"`
+	SKU             string          `json:"sku"`
+	Name            string          `json:"name"`
+	Unit            string          `json:"unit"`
+	Shipments       int64           `json:"shipments"`
+	ShippedQuantity decimal.Decimal `json:"shipped_quantity"`
+	ShippedValue    decimal.Decimal `json:"shipped_value"`
+}
+
+// topMovers ranks products by value shipped in the last ?days=30, top ?limit=5.
+func (h *ReportHandler) topMovers(w http.ResponseWriter, r *http.Request) {
+	fields := map[string]string{}
+	days := intParam(fields, r.URL.Query(), "days", 30, 1, 365)
+	limit := intParam(fields, r.URL.Query(), "limit", 5, 1, 50)
+	if !valid(w, fields) {
+		return
+	}
+	now := time.Now().In(ist)
+	since := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, ist).AddDate(0, 0, -(days - 1))
+
+	rows, err := h.q.ListTopMovers(r.Context(), sqlc.ListTopMoversParams{
+		Since:   pgtype.Timestamptz{Time: since, Valid: true},
+		MaxRows: int32(limit),
+	})
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+	data := make([]topMoverRow, len(rows))
+	for i, p := range rows {
+		data[i] = topMoverRow{
+			ProductID:       p.ProductID,
+			SKU:             p.Sku,
+			Name:            p.Name,
+			Unit:            p.Unit,
+			Shipments:       p.Shipments,
+			ShippedQuantity: toDecimal(p.ShippedQuantity),
+			ShippedValue:    toDecimal(p.ShippedValue),
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": data, "since": since})
+}
+
+// intParam reads an optional whole-number query value within [min, max].
+func intParam(fields map[string]string, query url.Values, name string, def, min, max int) int {
+	raw := query.Get(name)
+	if raw == "" {
+		return def
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < min || n > max {
+		fields[name] = "must be a whole number from " + strconv.Itoa(min) + " to " + strconv.Itoa(max)
+		return def
+	}
+	return n
 }
