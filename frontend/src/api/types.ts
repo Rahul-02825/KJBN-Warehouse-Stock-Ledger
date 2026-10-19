@@ -61,3 +61,15 @@ export interface Location {
   description: string
   created_at: string
 }
+
+// One cell of the stock grid: a product in a bin.
+export interface StockCell {
+  product_id: number
+  sku: string
+  product_name: string
+  unit: Unit
+  location_id: number
+  location_code: string
+  quantity: Decimal
+  average_cost: Decimal
+}
