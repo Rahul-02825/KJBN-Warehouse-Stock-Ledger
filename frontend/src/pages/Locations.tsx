@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ListResponse, Location, Warehouse } from '../api/types'
+import { BinContents } from '../components/BinContents'
 import { LocationForm } from '../components/LocationForm'
 import { SectionTabs } from '../components/SectionTabs'
 import { catalogueTabs } from '../lib/navigation'
@@ -11,6 +12,7 @@ import { useApi } from '../lib/useApi'
 export function Locations() {
   const [creating, setCreating] = useState(false)
   const [message, setMessage] = useState('')
+  const [opened, setOpened] = useState<Location | null>(null)
   const locations = useApi<ListResponse<Location>>('/api/locations')
   const warehouses = useApi<ListResponse<Warehouse>>('/api/warehouses')
   const warehouse = warehouses.data?.data[0]
@@ -28,7 +30,7 @@ export function Locations() {
       <PageHeader
         eyebrow="Catalogue"
         title="Bins"
-        description="Where stock is kept. Every piece, kilogram or litre takes one unit of space; receipts that overflow a bin go to the nearest bins with space."
+        description="Where stock is kept. Every piece, kilogram or litre takes one unit of space. Select a bin to see what it holds."
         actions={
           !creating &&
           warehouse && (
@@ -72,7 +74,11 @@ export function Locations() {
         <Table head={['Code', 'Description', 'Position (m)', 'From centre', 'Fill', 'Placement']} numeric={[3]}>
           {locations.data.data.map((l) => (
             <Row key={l.id}>
-              <Td className="code">{l.code}</Td>
+              <Td>
+                <button onClick={() => setOpened(l)} className="link-quiet code" aria-haspopup="dialog">
+                  {l.code}
+                </button>
+              </Td>
               <Td className="whitespace-normal text-muted">{l.description || '–'}</Td>
               <Td className="num text-muted">
                 {l.x}, {l.y}
@@ -86,6 +92,7 @@ export function Locations() {
           ))}
         </Table>
       )}
+      {opened && <BinContents key={opened.id} bin={opened} onClose={() => setOpened(null)} />}
     </>
   )
 }
