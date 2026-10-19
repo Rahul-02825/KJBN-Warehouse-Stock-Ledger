@@ -1,3 +1,5 @@
+import { X } from 'lucide-react'
+import { icon } from './icon'
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
 import type { Location, LocationBalances } from '../api/types'
@@ -36,8 +38,9 @@ export function BinContents({ bin, onClose }: { bin: Location; onClose: () => vo
           </div>
           <button
             onClick={() => dialog.current?.close()}
-            className="rounded-btn border border-line px-3 py-1.5 text-sm text-muted transition-colors duration-200 hover:border-petrol hover:text-ink"
+            className="inline-flex items-center gap-1.5 rounded-btn border border-line px-3 py-1.5 text-sm text-muted transition-colors duration-200 hover:border-petrol hover:text-ink"
           >
+            <X {...icon} />
             Close
           </button>
         </div>

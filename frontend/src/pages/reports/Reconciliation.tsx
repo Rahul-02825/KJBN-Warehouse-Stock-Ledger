@@ -1,3 +1,5 @@
+import { RefreshCw } from 'lucide-react'
+import { icon } from '../../components/icon'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import type { ReconciliationResponse } from '../../api/types'
@@ -19,6 +21,7 @@ export function Reconciliation() {
         description="Recounts every bin from the ledger and compares it with the stored balance. It only reports; it never changes anything."
         actions={
           <Button variant="ghost" onClick={reload} disabled={loading}>
+            <RefreshCw {...icon} className={loading ? 'animate-spin' : ''} />
             {loading ? 'Recounting…' : 'Recount now'}
           </Button>
         }

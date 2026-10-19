@@ -1,3 +1,4 @@
+import { Calculator, CalendarRange, Scale, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import type { ActivityDay, CostCheckRow, ForecastRow, ListResponse, LowStockRow, ReconciliationResponse, TopMover, ValuationResponse, Warehouse } from '../api/types'
 import { ActivityChart, TopMoversChart } from '../components/Charts'
@@ -5,6 +6,7 @@ import { ButtonLink, ErrorAlert, FeaturePanel, PageHeader, Panel, Spinner } from
 import { formatDecimal, formatMoney } from '../lib/format'
 import { fillText } from '../lib/layout'
 import { useApi } from '../lib/useApi'
+import { useCountUp } from '../lib/useCountUp'
 
 export function Dashboard() {
   const valuation = useApi<ValuationResponse>('/api/reports/valuation')
@@ -42,7 +44,7 @@ export function Dashboard() {
             <div className="grid gap-8 md:grid-cols-[1.5fr_1fr] md:items-end">
               <div>
                 <p className="text-sm text-on-petrol-muted">Inventory value</p>
-                <p className="num mt-2 font-serif text-[clamp(40px,6.4vw,68px)] leading-none tracking-[-0.02em]">{formatMoney(valuation.data!.total_value)}</p>
+                <InventoryValue total={valuation.data!.total_value} />
                 <p className="mt-4 text-sm text-on-petrol-muted">
                   {valuation.data!.data.length} products
                   {warehouse && <> in a {warehouse.radius_m} m warehouse</>}
@@ -78,6 +80,16 @@ export function Dashboard() {
   )
 }
 
+function InventoryValue({ total }: { total: string }) {
+  const target = Number(total)
+  const counted = useCountUp(target)
+  return (
+    <p className="num mt-2 font-serif text-[clamp(40px,6.4vw,68px)] leading-none tracking-[-0.02em]" aria-label={formatMoney(total)}>
+      {counted >= target ? formatMoney(total) : formatMoney(counted.toFixed(2))}
+    </p>
+  )
+}
+
 function HeroFigure({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -101,10 +113,32 @@ function NeedsAttention({ lowStock, drift, costMismatches, seasonGaps }: { lowSt
               .join(', '),
       to: '/reports/low-stock',
       action: 'Review low stock',
+      Icon: TriangleAlert,
     },
-    { count: drift, text: drift === 1 ? 'bin balance differs from the ledger' : 'bin balances differ from the ledger', to: '/reports/reconciliation', action: 'Reconcile' },
-    { count: costMismatches, text: costMismatches === 1 ? 'average cost does not match its history' : 'average costs do not match their history', to: '/reports/cost-check', action: 'Check costs' },
-    { count: seasonGaps, text: seasonGaps === 1 ? 'product has less stock than last season' : 'products have less stock than last season', to: '/reports/season-forecast', action: 'Plan stock' },
+    {
+      count: drift,
+      text: drift === 1 ? 'bin balance differs from the ledger' : 'bin balances differ from the ledger',
+      detail: '',
+      to: '/reports/reconciliation',
+      action: 'Reconcile',
+      Icon: Scale,
+    },
+    {
+      count: costMismatches,
+      text: costMismatches === 1 ? 'average cost does not match its history' : 'average costs do not match their history',
+      detail: '',
+      to: '/reports/cost-check',
+      action: 'Check costs',
+      Icon: Calculator,
+    },
+    {
+      count: seasonGaps,
+      text: seasonGaps === 1 ? 'product has less stock than last season' : 'products have less stock than last season',
+      detail: '',
+      to: '/reports/season-forecast',
+      action: 'Plan stock',
+      Icon: CalendarRange,
+    },
   ].filter((i) => i.count > 0)
 
   return (
@@ -114,9 +148,9 @@ function NeedsAttention({ lowStock, drift, costMismatches, seasonGaps }: { lowSt
         <p className="text-muted">Nothing right now. Every product is above its reorder level and the ledger agrees with every bin.</p>
       ) : (
         <ul className="mt-4 divide-y divide-line border-y border-line">
-          {items.map((i) => (
-            <li key={i.to} className="grid gap-x-6 gap-y-1 py-4 sm:grid-cols-[64px_1fr_auto] sm:items-baseline">
-              <span className="num font-serif text-[30px] leading-none">{i.count}</span>
+          {items.map((i, n) => (
+            <li key={i.to} className="grid animate-rise gap-x-6 gap-y-1 py-4 sm:grid-cols-[88px_1fr_auto] sm:items-center" style={{ animationDelay: `${n * 70}ms` }}>
+              <AttentionCount count={i.count} Icon={i.Icon} />
               <div>
                 <p>{i.text}</p>
                 {i.detail && <p className="mt-0.5 text-[13px] text-muted">{i.detail}</p>}
@@ -129,5 +163,16 @@ function NeedsAttention({ lowStock, drift, costMismatches, seasonGaps }: { lowSt
         </ul>
       )}
     </section>
+  )
+}
+
+function AttentionCount({ count, Icon }: { count: number; Icon: LucideIcon }) {
+  return (
+    <span className="flex items-center gap-3">
+      <span className="grid h-8 w-8 place-items-center rounded-full bg-saffron-soft text-saffron-ink">
+        <Icon size={15} strokeWidth={1.75} aria-hidden />
+      </span>
+      <span className="num font-serif text-[30px] leading-none">{count}</span>
+    </span>
   )
 }

@@ -1,3 +1,5 @@
+import { Plus } from 'lucide-react'
+import { icon } from '../components/icon'
 import { useState } from 'react'
 import type { ListResponse, Location, Warehouse } from '../api/types'
 import { BinContents } from '../components/BinContents'
@@ -40,6 +42,7 @@ export function Locations() {
                 setMessage('')
               }}
             >
+              <Plus {...icon} />
               Add bin
             </Button>
           )
@@ -67,7 +70,12 @@ export function Locations() {
       {!locations.data || !warehouse ? (
         !error && <Spinner />
       ) : locations.data.data.length === 0 ? (
-        <EmptyState title="No bins yet" action={<Button onClick={() => setCreating(true)}>Add bin</Button>}>
+        <EmptyState title="No bins yet" action={
+            <Button onClick={() => setCreating(true)}>
+              <Plus {...icon} />
+              Add bin
+            </Button>
+          }>
           Add a bin before receiving stock.
         </EmptyState>
       ) : (
@@ -105,7 +113,7 @@ function FillBar({ used, capacity }: { used: string; capacity: number | null }) 
       <p className="num">{fillText(used, capacity)}</p>
       {capacity !== null && (
         <div className="mt-1.5 h-1 rounded-full bg-paper-2" role="img" aria-label={`${percent}% full`}>
-          <div className={`h-1 rounded-full ${color}`} style={{ width: `${percent}%` }} />
+          <div className={`h-1 origin-left animate-grow-x rounded-full ${color}`} style={{ width: `${percent}%` }} />
         </div>
       )}
     </div>

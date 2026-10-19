@@ -42,8 +42,8 @@ export function ActivityChart({ days }: { days: ActivityDay[] }) {
               aria-label={`${dayLabel.format(new Date(d.day))}: ${totals[i]} movements`}
             >
               <span
-                className={`block w-full rounded-t-[4px] transition-colors duration-200 ${active === i ? 'bg-ink' : 'bg-petrol'}`}
-                style={{ height: totals[i] === 0 ? 0 : `max(${(totals[i] / max) * 100}%, 3px)` }}
+                className={`block w-full origin-bottom animate-grow-y rounded-t-[4px] transition-colors duration-200 ${active === i ? 'bg-ink' : 'bg-petrol'}`}
+                style={{ height: totals[i] === 0 ? 0 : `max(${(totals[i] / max) * 100}%, 3px)`, animationDelay: `${i * 30}ms` }}
               />
             </button>
           ))}
@@ -91,7 +91,7 @@ export function TopMoversChart({ movers }: { movers: TopMover[] }) {
   const max = Math.max(...movers.map((m) => Number(m.shipped_value)), 1)
   return (
     <ul className="space-y-4">
-      {movers.map((m) => (
+      {movers.map((m, i) => (
         <li key={m.product_id}>
           <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
             <Link to={`/products/${m.product_id}`} className="link-quiet code">
@@ -102,7 +102,10 @@ export function TopMoversChart({ movers }: { movers: TopMover[] }) {
             </span>
           </div>
           <div className="h-1.5 rounded-full bg-paper-2">
-            <div className="h-1.5 rounded-full bg-petrol" style={{ width: `${(Number(m.shipped_value) / max) * 100}%` }} />
+            <div
+              className="h-1.5 origin-left animate-grow-x rounded-full bg-petrol"
+              style={{ width: `${(Number(m.shipped_value) / max) * 100}%`, animationDelay: `${150 + i * 80}ms` }}
+            />
           </div>
         </li>
       ))}
