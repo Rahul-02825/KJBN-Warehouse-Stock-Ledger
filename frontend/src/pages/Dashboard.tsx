@@ -49,7 +49,7 @@ export function Dashboard() {
                 </p>
               </div>
               <dl className="grid grid-cols-2 gap-6 border-petrol-line md:border-l md:pl-8">
-                <HeroFigure label="Items stored" value={warehouse ? fillText(warehouse.used, warehouse.capacity) : '—'} />
+                <HeroFigure label="Units stored" value={warehouse ? fillText(warehouse.used, warehouse.capacity) : '—'} />
                 <HeroFigure label="Below reorder level" value={String(lowStock.data!.data.length)} />
                 <HeroFigure label="Movements, 14 days" value={String(activity.data!.data.reduce((n, d) => n + d.in_count + d.out_count + d.transfer_count + d.adjustment_count + d.reversal_count, 0))} />
                 <HeroFigure label="Bins out of balance" value={String(recon.data!.drift_count)} />

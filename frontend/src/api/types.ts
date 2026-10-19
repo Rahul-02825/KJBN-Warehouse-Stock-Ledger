@@ -61,7 +61,7 @@ export interface Location {
   y: number
   capacity: number | null
   auto_place: boolean
-  used?: number
+  used?: Decimal
   created_at: string
 }
 
@@ -73,15 +73,16 @@ export interface Warehouse {
   y: number
   radius_m: number
   capacity: number | null
-  used: number
+  used: Decimal
 }
 
 export interface PlacementPreview {
   warehouse_id: number
+  unit: Unit
   start_location_id: number
   start_location_code: string
   reason: string
-  allocations: { location_id: number; location_code: string; quantity: number; distance_m: number }[]
+  allocations: { location_id: number; location_code: string; quantity: Decimal; distance_m: number }[]
 }
 
 // One cell of the stock grid: a product in a bin.

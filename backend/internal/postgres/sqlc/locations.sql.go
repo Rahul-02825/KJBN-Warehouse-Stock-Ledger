@@ -101,10 +101,9 @@ func (q *Queries) GetLocationByID(ctx context.Context, id int64) (Location, erro
 const listLocations = `-- name: ListLocations :many
 SELECT
     l.id, l.code, l.description, l.created_at, l.warehouse_id, l.x, l.y, l.capacity, l.auto_place,
-    COALESCE(SUM(sb.quantity) FILTER (WHERE p.unit = 'pcs'), 0)::BIGINT AS used
+    COALESCE(SUM(sb.quantity), 0)::NUMERIC(18, 4) AS used
 FROM locations l
 LEFT JOIN stock_balances sb ON sb.location_id = l.id
-LEFT JOIN products p ON p.id = sb.product_id
 GROUP BY l.id
 ORDER BY l.code
 `
@@ -119,7 +118,7 @@ type ListLocationsRow struct {
 	Y           float64            `json:"y"`
 	Capacity    pgtype.Int8        `json:"capacity"`
 	AutoPlace   bool               `json:"auto_place"`
-	Used        int64              `json:"used"`
+	Used        pgtype.Numeric     `json:"used"`
 }
 
 func (q *Queries) ListLocations(ctx context.Context) ([]ListLocationsRow, error) {

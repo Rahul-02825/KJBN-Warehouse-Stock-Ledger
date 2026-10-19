@@ -23,8 +23,7 @@ export function ReceiveForm({ products, locations, initialProduct }: { products:
   const { submit, errors, serverError, saving } = useMovementSubmit('/api/movements/in')
 
   const unit = products.find((p) => String(p.id) === productId)?.unit ?? ''
-  const autoPlaced = unit === 'pcs'
-  const previewable = autoPlaced && checkDecimal(quantity, unit) === ''
+  const previewable = productId !== '' && checkDecimal(quantity, unit) === ''
   const preview = usePlacementPreview(
     previewable ? { product_id: Number(productId), quantity: quantity.trim(), location_id: locationId ? Number(locationId) : undefined } : null,
   )
@@ -42,7 +41,6 @@ export function ReceiveForm({ products, locations, initialProduct }: { products:
       },
       onlyErrors({
         product_id: productId ? '' : 'Choose a product',
-        location_id: locationId || autoPlaced ? '' : 'Choose a bin',
         quantity: checkDecimal(quantity, unit),
         unit_cost: checkDecimal(unitCost, ''),
         reference: checkText(reference, 'Reference', 128, false),
@@ -87,9 +85,7 @@ export function ReceiveForm({ products, locations, initialProduct }: { products:
             <>
               <BinStock productId={productId} locationId={locationId} version={done?.movement.id ?? 0} />
               <PlacementPlan plan={preview.plan} error={preview.error} />
-              {!locationId && !preview.plan && !preview.error && (
-                <AsideHint>{autoPlaced ? 'Enter a quantity to see where the items will go.' : 'Choose a bin to see what is in it now.'}</AsideHint>
-              )}
+              {!preview.plan && !preview.error && <AsideHint>Enter a quantity to see where it will go.</AsideHint>}
             </>
           ) : (
             <AsideHint>Choose a product to see where it will be stored and what the bin holds now.</AsideHint>
@@ -103,13 +99,13 @@ export function ReceiveForm({ products, locations, initialProduct }: { products:
         </Step>
         <Step index="02" title="Where it goes">
           <LocationSelect
-            label={autoPlaced ? 'Starting bin' : 'Bin'}
+            label="Starting bin"
             locations={locations}
             value={locationId}
             onChange={setLocationId}
             error={errors.location_id}
-            emptyLabel={autoPlaced ? 'Let the system choose' : 'Choose a bin…'}
-            hint={autoPlaced ? 'Anything that does not fit goes to the nearest bins with space' : undefined}
+            emptyLabel="Let the system choose"
+            hint="Anything that does not fit goes to the nearest bins with space"
           />
         </Step>
         <Step index="03" title="How much">

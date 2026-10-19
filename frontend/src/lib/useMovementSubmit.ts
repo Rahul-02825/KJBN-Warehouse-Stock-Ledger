@@ -38,7 +38,7 @@ export function useMovementSubmit(path: string) {
         const u = unit ? ` ${unit}` : ''
         setErrors({ quantity: `Only ${e.details.available}${u} available in this bin; you asked for ${e.details.requested}${u}.` })
       } else if (e.code === 'NO_SPACE') {
-        setErrors({ quantity: `Not enough space: only ${e.details.fit} of ${e.details.requested} items fit. Nothing was posted.` })
+        setErrors({ quantity: `Not enough space: only ${e.details.fit} of ${e.details.requested} units fit. Nothing was posted.` })
       } else setServerError(e)
       return null
     } finally {

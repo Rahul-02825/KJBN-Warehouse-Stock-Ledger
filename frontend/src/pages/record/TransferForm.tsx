@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import type { Location, Movement, Product } from '../../api/types'
 import { AsideHint, MovementForm, Step, Wide } from '../../components/MovementForm'
-import { BinStock, LocationSelect, ProductSelect } from '../../components/MovementFields'
+import { BinStock, LocationSelect, ProductSelect, SourceBinSelect } from '../../components/MovementFields'
 import { Field, Input, SuccessAlert } from '../../components/ui'
 import { loadCreatedBy } from '../../lib/createdBy'
 import { formatMoney, formatQuantity } from '../../lib/format'
@@ -85,12 +85,28 @@ export function TransferForm({ products, locations, initialProduct }: { products
       >
         <Step index="01" title="What moves">
           <Wide>
-            <ProductSelect products={products} value={productId} onChange={setProductId} error={errors.product_id} />
+            <ProductSelect
+              products={products}
+              value={productId}
+              onChange={(id) => {
+                setProductId(id)
+                setFromId('')
+              }}
+              error={errors.product_id}
+            />
           </Wide>
         </Step>
         <Step index="02" title="Between bins">
-          <LocationSelect label="From" locations={locations} value={fromId} onChange={setFromId} error={errors.from_location_id} />
-          <LocationSelect label="To" locations={locations} value={toId} onChange={setToId} error={errors.to_location_id} />
+          <SourceBinSelect
+            label="From"
+            productId={productId}
+            locations={locations}
+            value={fromId}
+            onChange={setFromId}
+            error={errors.from_location_id}
+            version={done?.id ?? 0}
+          />
+          <LocationSelect label="To" locations={locations} value={toId} onChange={setToId} error={errors.to_location_id} exclude={fromId} />
         </Step>
         <Step index="03" title="How much">
           <Field label={`Quantity${unit ? ` (${unit})` : ''}`} error={errors.quantity} hint={unit === 'pcs' ? 'Whole numbers only' : 'Up to 4 decimals'}>

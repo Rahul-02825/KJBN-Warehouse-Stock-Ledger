@@ -1,13 +1,14 @@
 import type { ApiError } from '../api/client'
 import type { PlacementPreview } from '../api/types'
+import { formatDecimal, formatQuantity } from '../lib/format'
 import { Notice } from './ui'
 
 export function PlacementPlan({ plan, error }: { plan: PlacementPreview | null; error: ApiError | null }) {
   if (error?.code === 'NO_SPACE') {
     return (
       <Notice>
-        Not enough space: only <span className="num font-medium">{error.details.fit}</span> of <span className="num">{error.details.requested}</span> items
-        fit in the warehouse.
+        Not enough space: only <span className="num font-medium">{formatDecimal(error.details.fit)}</span> of{' '}
+        <span className="num">{formatDecimal(error.details.requested)}</span> units fit in the warehouse.
       </Notice>
     )
   }
@@ -24,7 +25,7 @@ export function PlacementPlan({ plan, error }: { plan: PlacementPreview | null; 
           <li key={a.location_id} className="flex items-baseline justify-between gap-3 py-2">
             <span className="code">{a.location_code}</span>
             <span className="num">
-              <span className="font-medium">{a.quantity} pcs</span>
+              <span className="font-medium">{formatQuantity(a.quantity, plan.unit)}</span>
               {a.distance_m > 0 && <span className="ml-2 text-muted">{a.distance_m} m</span>}
             </span>
           </li>

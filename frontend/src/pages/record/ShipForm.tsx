@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import type { Location, Movement, Product } from '../../api/types'
 import { AsideHint, MovementForm, Step, Wide } from '../../components/MovementForm'
-import { BinStock, LocationSelect, ProductSelect } from '../../components/MovementFields'
+import { BinStock, ProductSelect, SourceBinSelect } from '../../components/MovementFields'
 import { Field, Input, SuccessAlert } from '../../components/ui'
 import { loadCreatedBy } from '../../lib/createdBy'
 import { formatMoney, formatQuantity } from '../../lib/format'
@@ -74,11 +74,27 @@ export function ShipForm({ products, locations, initialProduct }: { products: Pr
       >
         <Step index="01" title="What is leaving">
           <Wide>
-            <ProductSelect products={products} value={productId} onChange={setProductId} error={errors.product_id} />
+            <ProductSelect
+              products={products}
+              value={productId}
+              onChange={(id) => {
+                setProductId(id)
+                setLocationId('')
+              }}
+              error={errors.product_id}
+            />
           </Wide>
         </Step>
         <Step index="02" title="From where">
-          <LocationSelect label="Bin" locations={locations} value={locationId} onChange={setLocationId} error={errors.location_id} />
+          <SourceBinSelect
+            label="Bin"
+            productId={productId}
+            locations={locations}
+            value={locationId}
+            onChange={setLocationId}
+            error={errors.location_id}
+            version={done?.id ?? 0}
+          />
         </Step>
         <Step index="03" title="How much">
           <Field label={`Quantity${unit ? ` (${unit})` : ''}`} error={errors.quantity} hint={unit === 'pcs' ? 'Whole numbers only' : 'Up to 4 decimals'}>
