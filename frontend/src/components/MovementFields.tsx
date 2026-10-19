@@ -1,5 +1,6 @@
 import type { Location, Product, StockCell } from '../api/types'
 import { formatMoney, formatQuantity } from '../lib/format'
+import { binLabel } from '../lib/layout'
 import { useApi } from '../lib/useApi'
 import { Field, Select } from './ui'
 
@@ -24,21 +25,24 @@ export function LocationSelect({
   value,
   onChange,
   error,
+  emptyLabel = 'Choose a bin…',
+  hint,
 }: {
   label: string
   locations: Location[]
   value: string
   onChange: (v: string) => void
   error?: string
+  emptyLabel?: string
+  hint?: string
 }) {
   return (
-    <Field label={label} error={error}>
+    <Field label={label} error={error} hint={hint}>
       <Select value={value} onChange={(e) => onChange(e.target.value)} invalid={!!error}>
-        <option value="">Choose a bin…</option>
+        <option value="">{emptyLabel}</option>
         {locations.map((l) => (
           <option key={l.id} value={l.id}>
-            {l.code}
-            {l.description ? ` · ${l.description}` : ''}
+            {binLabel(l)}
           </option>
         ))}
       </Select>
