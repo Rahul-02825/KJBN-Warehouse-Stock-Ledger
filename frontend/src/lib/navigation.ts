@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Calculator, CalendarRange, IndianRupee, Package, Scale, SlidersHorizontal, TrendingDown, Warehouse } from 'lucide-react'
+import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Calculator, ClipboardList, CalendarRange, IndianRupee, Package, Scale, SlidersHorizontal, TrendingDown, Warehouse } from 'lucide-react'
 
 export const catalogueTabs = [
   { to: '/products', label: 'Products', Icon: Package },
@@ -18,4 +18,5 @@ export const movementIcons = {
   ship: ArrowUpFromLine,
   transfer: ArrowLeftRight,
   adjust: SlidersHorizontal,
+  count: ClipboardList,
 }

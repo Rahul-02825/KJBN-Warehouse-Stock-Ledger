@@ -30,6 +30,7 @@ func (h *MovementHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/movements/transfer", h.postTransfer)
 	mux.HandleFunc("POST /api/movements/adjustment", h.postAdjustment)
 	mux.HandleFunc("POST /api/movements/{id}/reverse", h.reverse)
+	mux.HandleFunc("POST /api/stock-takes", h.stockTake)
 	mux.HandleFunc("GET /api/movements", h.list)
 	mux.HandleFunc("GET /api/movements/{id}", h.get)
 }
