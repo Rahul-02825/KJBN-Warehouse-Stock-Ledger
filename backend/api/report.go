@@ -211,12 +211,30 @@ func (h *ReportHandler) ledger(w http.ResponseWriter, r *http.Request) {
 			RunningLocation: toDecimal(e.RunningLocationBalance),
 		}
 	}
+	if r.URL.Query().Get("format") == "csv" {
+		writeLedgerCSV(w, product, data)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"product_id": product.ID,
 		"sku":        product.Sku,
 		"unit":       product.Unit,
 		"data":       data,
 	})
+}
+
+func writeLedgerCSV(w http.ResponseWriter, product sqlc.Product, data []ledgerRow) {
+	rows := make([][]string, len(data))
+	for i, e := range data {
+		rows[i] = []string{
+			e.CreatedAt.Format(time.RFC3339), strconv.FormatInt(e.MovementID, 10), e.Type, e.LocationCode,
+			e.QuantityDelta.String(), csvDecimal(e.UnitCost), e.RunningLocation.String(), e.RunningTotal.String(),
+			csvText(e.Reference), csvPtr(e.Reason), csvText(e.CreatedBy),
+		}
+	}
+	writeCSV(w, "ledger-"+product.Sku+".csv", []string{
+		"posted_at", "movement_id", "type", "bin", "change", "unit_cost", "bin_balance", "total_balance", "reference", "reason", "created_by",
+	}, rows)
 }
 
 type costCheckRow struct {

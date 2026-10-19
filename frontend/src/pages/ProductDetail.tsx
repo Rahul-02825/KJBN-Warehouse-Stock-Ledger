@@ -3,6 +3,7 @@ import { icon } from '../components/icon'
 import { movementIcons } from '../lib/navigation'
 import { Link, useParams } from 'react-router'
 import type { ListResponse, LowStockRow, Product, ProductBalances, ProductLedger } from '../api/types'
+import { CsvLink } from '../components/CsvLink'
 import { Delta, MovementBadge } from '../components/MovementBadge'
 import { Row, Table, Td } from '../components/Table'
 import { ButtonLink, EmptyState, ErrorAlert, Eyebrow, Spinner, Stat } from '../components/ui'
@@ -88,8 +89,13 @@ export function ProductDetail() {
       </section>
 
       <section>
-        <h2 className="mb-1 font-serif text-[clamp(22px,2.6vw,30px)] leading-tight">Ledger</h2>
-        <p className="mb-4 text-sm text-muted">Oldest first. Each row is one change; the balances show what was left right after it.</p>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="mb-1 font-serif text-[clamp(22px,2.6vw,30px)] leading-tight">Ledger</h2>
+            <p className="text-sm text-muted">Oldest first. Each row is one change; the balances show what was left right after it.</p>
+          </div>
+          {ledger.data.data.length > 0 && <CsvLink path={`/api/products/${p.id}/ledger?format=csv`} />}
+        </div>
         {ledger.data.data.length === 0 ? (
           <EmptyState title="No movements yet" action={<ButtonLink to={`/record/receive?product=${p.id}`}>Receive stock</ButtonLink>}>
             The ledger starts with the first receipt.
