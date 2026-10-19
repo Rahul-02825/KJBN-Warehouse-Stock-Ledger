@@ -23,6 +23,16 @@ const navGroups = [
     ],
   },
   { title: 'History', links: [{ to: '/movements', label: 'Movements' }] },
+  {
+    title: 'Reports',
+    links: [
+      { to: '/reports/low-stock', label: 'Low stock' },
+      { to: '/reports/valuation', label: 'Valuation' },
+      { to: '/reports/reconciliation', label: 'Reconciliation' },
+      { to: '/reports/cost-check', label: 'Cost check' },
+      { to: '/reports/season-forecast', label: 'Season forecast' },
+    ],
+  },
 ]
 
 export function Layout() {
