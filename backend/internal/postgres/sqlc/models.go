@@ -29,6 +29,7 @@ type Movement struct {
 	CreatedBy      string             `json:"created_by"`
 	ReversalOfID   pgtype.Int8        `json:"reversal_of_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	IdempotencyKey pgtype.Text        `json:"idempotency_key"`
 }
 
 type MovementEntry struct {

@@ -102,3 +102,26 @@ SET quantity   = quantity - sqlc.arg('amount'),
 WHERE product_id = sqlc.arg('product_id')
   AND location_id = sqlc.arg('location_id')
   AND quantity >= sqlc.arg('amount');
+
+-- Stock as it was at a point in time, rebuilt from the ledger.
+-- Only cells with a non-zero balance at that time are returned.
+-- name: ListStockAsOf :many
+SELECT
+    p.id AS product_id,
+    p.sku,
+    p.name AS product_name,
+    p.unit,
+    l.id AS location_id,
+    l.code AS location_code,
+    SUM(e.quantity_delta)::NUMERIC(18, 4) AS quantity
+FROM movement_entries e
+JOIN products p ON p.id = e.product_id
+JOIN locations l ON l.id = e.location_id
+WHERE e.created_at < sqlc.arg('as_of')
+  AND (sqlc.narg('product_id')::BIGINT IS NULL
+       OR e.product_id = sqlc.narg('product_id'))
+  AND (sqlc.narg('location_id')::BIGINT IS NULL
+       OR e.location_id = sqlc.narg('location_id'))
+GROUP BY p.id, l.id
+HAVING SUM(e.quantity_delta) <> 0
+ORDER BY p.name, p.id, l.code;

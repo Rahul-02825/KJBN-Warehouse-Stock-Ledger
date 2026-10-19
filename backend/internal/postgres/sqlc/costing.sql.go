@@ -26,6 +26,100 @@ func (q *Queries) GetLedgerProductTotalQuantity(ctx context.Context, productID i
 	return total_quantity, err
 }
 
+const listMovementsForCostCheck = `-- name: ListMovementsForCostCheck :many
+SELECT
+    m.id,
+    m.product_id,
+    m.movement_type,
+    m.quantity,
+    m.unit_cost,
+    COALESCE(o.movement_type, '')::VARCHAR AS reversed_type,
+    (SELECT COALESCE(SUM(e.quantity_delta), 0)
+     FROM movement_entries e
+     WHERE e.movement_id = m.id)::NUMERIC(18, 4) AS net_delta
+FROM movements m
+LEFT JOIN movements o ON o.id = m.reversal_of_id
+ORDER BY m.product_id, m.id
+`
+
+type ListMovementsForCostCheckRow struct {
+	ID           int64          `json:"id"`
+	ProductID    int64          `json:"product_id"`
+	MovementType string         `json:"movement_type"`
+	Quantity     pgtype.Numeric `json:"quantity"`
+	UnitCost     pgtype.Numeric `json:"unit_cost"`
+	ReversedType string         `json:"reversed_type"`
+	NetDelta     pgtype.Numeric `json:"net_delta"`
+}
+
+// Every movement in posting order, for replaying the average cost.
+// net_delta is the movement's total stock effect across all bins.
+func (q *Queries) ListMovementsForCostCheck(ctx context.Context) ([]ListMovementsForCostCheckRow, error) {
+	rows, err := q.db.Query(ctx, listMovementsForCostCheck)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMovementsForCostCheckRow{}
+	for rows.Next() {
+		var i ListMovementsForCostCheckRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProductID,
+			&i.MovementType,
+			&i.Quantity,
+			&i.UnitCost,
+			&i.ReversedType,
+			&i.NetDelta,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProductCosts = `-- name: ListProductCosts :many
+SELECT id, sku, name, average_cost
+FROM products
+ORDER BY sku
+`
+
+type ListProductCostsRow struct {
+	ID          int64          `json:"id"`
+	Sku         string         `json:"sku"`
+	Name        string         `json:"name"`
+	AverageCost pgtype.Numeric `json:"average_cost"`
+}
+
+func (q *Queries) ListProductCosts(ctx context.Context) ([]ListProductCostsRow, error) {
+	rows, err := q.db.Query(ctx, listProductCosts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProductCostsRow{}
+	for rows.Next() {
+		var i ListProductCostsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Sku,
+			&i.Name,
+			&i.AverageCost,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockProductForCostUpdate = `-- name: LockProductForCostUpdate :one
 SELECT id, sku, name, unit, reorder_level, average_cost, created_at, updated_at
 FROM products

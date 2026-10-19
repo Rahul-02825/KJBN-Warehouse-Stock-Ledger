@@ -67,3 +67,78 @@ WHERE (sqlc.arg('only_drift')::BOOLEAN = FALSE
        OR COALESCE(sb.quantity, 0) <> COALESCE(lt.ledger_quantity, 0))
 ORDER BY (COALESCE(sb.quantity, 0) <> COALESCE(lt.ledger_quantity, 0)) DESC,
          p.sku, l.code;
+
+-- Postings per day (Indian Standard Time) for the last N days, including days with none.
+-- name: GetDailyActivity :many
+WITH days AS (
+    SELECT generate_series(
+        (NOW() AT TIME ZONE 'Asia/Kolkata')::DATE - (sqlc.arg('days')::INT - 1),
+        (NOW() AT TIME ZONE 'Asia/Kolkata')::DATE,
+        INTERVAL '1 day'
+    )::DATE AS day
+)
+SELECT
+    d.day,
+    COUNT(m.id) FILTER (WHERE m.movement_type = 'IN') AS in_count,
+    COUNT(m.id) FILTER (WHERE m.movement_type = 'OUT') AS out_count,
+    COUNT(m.id) FILTER (WHERE m.movement_type = 'TRANSFER') AS transfer_count,
+    COUNT(m.id) FILTER (WHERE m.movement_type = 'ADJUSTMENT') AS adjustment_count,
+    COUNT(m.id) FILTER (WHERE m.movement_type = 'REVERSAL') AS reversal_count,
+    COALESCE(SUM(m.quantity * m.unit_cost) FILTER (WHERE m.movement_type = 'IN'), 0)::NUMERIC(24, 4) AS in_value,
+    COALESCE(SUM(m.quantity * m.unit_cost) FILTER (WHERE m.movement_type = 'OUT'), 0)::NUMERIC(24, 4) AS out_value
+FROM days d
+LEFT JOIN movements m ON (m.created_at AT TIME ZONE 'Asia/Kolkata')::DATE = d.day
+GROUP BY d.day
+ORDER BY d.day;
+
+-- Products ranked by value shipped since a time. Reversed shipments are left out.
+-- name: ListTopMovers :many
+SELECT
+    p.id AS product_id,
+    p.sku,
+    p.name,
+    p.unit,
+    COUNT(*) AS shipments,
+    SUM(m.quantity)::NUMERIC(18, 4) AS shipped_quantity,
+    SUM(m.quantity * m.unit_cost)::NUMERIC(24, 4) AS shipped_value
+FROM movements m
+JOIN products p ON p.id = m.product_id
+WHERE m.movement_type = 'OUT'
+  AND m.created_at >= sqlc.arg('since')
+  AND NOT EXISTS (SELECT 1 FROM movements r WHERE r.reversal_of_id = m.id)
+GROUP BY p.id
+ORDER BY shipped_value DESC, p.name
+LIMIT sqlc.arg('max_rows');
+
+-- Products whose current stock is below what was shipped in the same window last year.
+-- Reversed shipments are not demand. Products with no shipments in that window are left out.
+-- name: ListSeasonForecast :many
+WITH last_year AS (
+    SELECT m.product_id, SUM(m.quantity) AS demand
+    FROM movements m
+    WHERE m.movement_type = 'OUT'
+      AND m.created_at >= sqlc.arg('window_start')
+      AND m.created_at < sqlc.arg('window_end')
+      AND NOT EXISTS (SELECT 1 FROM movements r WHERE r.reversal_of_id = m.id)
+    GROUP BY m.product_id
+),
+stock AS (
+    SELECT product_id, SUM(quantity) AS quantity
+    FROM stock_balances
+    GROUP BY product_id
+)
+SELECT
+    p.id AS product_id,
+    p.sku,
+    p.name,
+    p.unit,
+    ly.demand::NUMERIC(18, 4) AS last_year_demand,
+    COALESCE(s.quantity, 0)::NUMERIC(18, 4) AS current_stock,
+    (ly.demand - COALESCE(s.quantity, 0))::NUMERIC(18, 4) AS gap,
+    p.average_cost,
+    ((ly.demand - COALESCE(s.quantity, 0)) * p.average_cost)::NUMERIC(24, 4) AS gap_value
+FROM last_year ly
+JOIN products p ON p.id = ly.product_id
+LEFT JOIN stock s ON s.product_id = p.id
+WHERE ly.demand > COALESCE(s.quantity, 0)
+ORDER BY gap_value DESC, gap DESC, p.name;
