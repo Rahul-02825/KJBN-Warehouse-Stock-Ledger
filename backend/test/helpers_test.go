@@ -67,6 +67,11 @@ func testDB(t *testing.T) *pgxpool.Pool {
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, err = pool.Exec(context.Background(),
+		"UPDATE warehouses SET x = 0, y = 0, radius_m = 1000, capacity = NULL WHERE code = 'MAIN'")
+	if err != nil {
+		t.Fatal(err)
+	}
 	return pool
 }
 
