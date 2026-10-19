@@ -60,6 +60,7 @@ export function SourceBinSelect({
   onChange,
   error,
   version,
+  autoLabel,
 }: {
   label: string
   productId: string
@@ -68,12 +69,19 @@ export function SourceBinSelect({
   onChange: (v: string) => void
   error?: string
   version: number
+  autoLabel?: string
 }) {
   const { data, loading } = useApi<ProductBalances>(productId ? `/api/products/${productId}/balances?v=${version}` : null)
   const held = (data?.data ?? []).filter((b) => !/^0+(\.0+)?$/.test(b.quantity))
   const description = (id: number) => locations.find((l) => l.id === id)?.description
 
-  const placeholder = !productId ? 'Choose a product first' : loading && !data ? 'Loading bins…' : held.length === 0 ? 'No bin holds this product yet' : 'Choose a bin…'
+  const placeholder = !productId
+    ? 'Choose a product first'
+    : loading && !data
+      ? 'Loading bins…'
+      : held.length === 0
+        ? 'No bin holds this product yet'
+        : (autoLabel ?? 'Choose a bin…')
   return (
     <Field label={label} error={error} hint={productId && data && held.length > 0 ? 'Only bins that hold this product' : undefined}>
       <Select value={value} onChange={(e) => onChange(e.target.value)} invalid={!!error} disabled={!productId || held.length === 0}>

@@ -1,4 +1,4 @@
-import type { Location, Warehouse } from '../api/types'
+import type { Location, MovementDetail, Warehouse } from '../api/types'
 import { formatDecimal } from './format'
 
 export function distanceFromCentre(warehouse: Warehouse, x: number, y: number): number {
@@ -20,4 +20,9 @@ export function binLabel(location: Location): string {
   if (location.used !== undefined) parts.push(fillText(location.used, location.capacity))
   if (!location.auto_place) parts.push('manual only')
   return parts.join(' · ')
+}
+
+export function describeEntries(detail: MovementDetail, locations: Location[]): string {
+  const code = (id: number) => locations.find((l) => l.id === id)?.code ?? `#${id}`
+  return (detail.entries ?? []).map((e) => `${code(e.location_id)} (${e.quantity_delta.replace('-', '')})`).join(', ')
 }

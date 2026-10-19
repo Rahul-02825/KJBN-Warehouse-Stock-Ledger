@@ -8,7 +8,7 @@ export interface PreviewRequest {
   location_id?: number
 }
 
-export function usePlacementPreview(request: PreviewRequest | null) {
+export function usePlacementPreview(path: '/api/placements/preview' | '/api/picks/preview', request: PreviewRequest | null) {
   const [plan, setPlan] = useState<PlacementPreview | null>(null)
   const [error, setError] = useState<ApiError | null>(null)
   const key = request ? JSON.stringify(request) : ''
@@ -22,7 +22,7 @@ export function usePlacementPreview(request: PreviewRequest | null) {
         return
       }
       api
-        .post<PlacementPreview>('/api/placements/preview', JSON.parse(key))
+        .post<PlacementPreview>(path, JSON.parse(key))
         .then((result) => {
           if (cancelled) return
           setPlan(result)
@@ -38,7 +38,7 @@ export function usePlacementPreview(request: PreviewRequest | null) {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [key])
+  }, [path, key])
 
   return { plan, error }
 }

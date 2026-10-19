@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { api } from '../../api/client'
 import type { Location, Movement, MovementDetail, Product } from '../../api/types'
+import { describeEntries } from '../../lib/layout'
 import { AsideHint, MovementForm, Step, Wide } from '../../components/MovementForm'
 import { BinStock, LocationSelect, ProductSelect } from '../../components/MovementFields'
 import { PlacementPlan } from '../../components/PlacementPlan'
@@ -25,6 +26,7 @@ export function ReceiveForm({ products, locations, initialProduct }: { products:
   const unit = products.find((p) => String(p.id) === productId)?.unit ?? ''
   const previewable = productId !== '' && checkDecimal(quantity, unit) === ''
   const preview = usePlacementPreview(
+    '/api/placements/preview',
     previewable ? { product_id: Number(productId), quantity: quantity.trim(), location_id: locationId ? Number(locationId) : undefined } : null,
   )
 
@@ -53,7 +55,7 @@ export function ReceiveForm({ products, locations, initialProduct }: { products:
         api.get<Product>(`/api/products/${movement.product_id}`),
         api.get<MovementDetail>(`/api/movements/${movement.id}`),
       ])
-      setDone({ movement, product: updated, placed: describePlacement(detail, locations) })
+      setDone({ movement, product: updated, placed: describeEntries(detail, locations) })
       setQuantity('')
       setUnitCost('')
       setReference('')
@@ -127,9 +129,4 @@ export function ReceiveForm({ products, locations, initialProduct }: { products:
       </MovementForm>
     </>
   )
-}
-
-function describePlacement(detail: MovementDetail, locations: Location[]): string {
-  const code = (id: number) => locations.find((l) => l.id === id)?.code ?? `#${id}`
-  return (detail.entries ?? []).map((e) => `${code(e.location_id)} (${e.quantity_delta})`).join(', ')
 }

@@ -142,20 +142,28 @@ func (l *Ledger) PostIn(ctx context.Context, req InRequest) (m sqlc.Movement, er
 // PostOut values the shipment at the current average and stores that cost on the movement.
 func (l *Ledger) PostOut(ctx context.Context, req OutRequest) (m sqlc.Movement, err error) {
 	err = l.inTx(ctx, func(q *sqlc.Queries) error {
-		product, location, err := loadProductAndLocation(ctx, q, req.ProductID, req.LocationID, req.Quantity)
+		product, err := lockProduct(ctx, q, req.ProductID, req.Quantity)
+		if err != nil {
+			return err
+		}
+		warehouse, err := resolveWarehouse(ctx, q, req.LocationID, req.WarehouseID, false)
+		if err != nil {
+			return err
+		}
+		plan, err := planPick(ctx, q, warehouse, product, req.Quantity, req.LocationID)
 		if err != nil {
 			return err
 		}
 		m, err = applyChanges(ctx, q, product, sqlc.CreateMovementParams{
 			ProductID:      product.ID,
 			MovementType:   "OUT",
-			FromLocationID: optID(location.ID),
+			FromLocationID: optID(plan.Allocations[0].Bin.ID),
 			Quantity:       toNumeric(req.Quantity),
 			UnitCost:       product.AverageCost,
 			Reference:      req.Reference,
 			CreatedBy:      req.CreatedBy,
 			IdempotencyKey: optText(req.IdempotencyKey),
-		}, []change{{location.ID, req.Quantity.Neg()}})
+		}, plan.pickChanges())
 		return err
 	})
 	return m, err
