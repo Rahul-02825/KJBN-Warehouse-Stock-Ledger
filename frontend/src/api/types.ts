@@ -73,3 +73,36 @@ export interface StockCell {
   quantity: Decimal
   average_cost: Decimal
 }
+
+export type MovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT' | 'REVERSAL'
+
+export interface ProductBalances {
+  product_id: number
+  sku: string
+  unit: Unit
+  total_quantity: Decimal
+  data: { location_id: number; location_code: string; quantity: Decimal; updated_at: string }[]
+}
+
+// One ledger entry with running balances, oldest first.
+export interface LedgerEntry {
+  movement_id: number
+  created_at: string
+  type: MovementType
+  reference: string
+  reason: string | null
+  created_by: string
+  location_id: number
+  location_code: string
+  quantity_delta: Decimal
+  unit_cost: Decimal | null
+  running_total: Decimal
+  running_location_balance: Decimal
+}
+
+export interface ProductLedger {
+  product_id: number
+  sku: string
+  unit: Unit
+  data: LedgerEntry[]
+}

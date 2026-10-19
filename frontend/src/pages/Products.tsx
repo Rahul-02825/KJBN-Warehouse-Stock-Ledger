@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
 import type { PagedResponse, Product } from '../api/types'
 import { Pagination } from '../components/Pagination'
 import { ProductForm } from '../components/ProductForm'
@@ -76,7 +77,11 @@ export function Products() {
             <Table head={['SKU', 'Name', 'Unit', 'Reorder level', 'Average cost', 'Updated', '']} numeric={[3, 4]}>
               {data.data.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50">
-                  <Td className="font-mono">{p.sku}</Td>
+                  <Td className="font-mono">
+                    <Link to={`/products/${p.id}`} className="text-emerald-700 hover:underline">
+                      {p.sku}
+                    </Link>
+                  </Td>
                   <Td>{p.name}</Td>
                   <Td>{p.unit}</Td>
                   <Td className="text-right tabular-nums">{formatDecimal(p.reorder_level)}</Td>

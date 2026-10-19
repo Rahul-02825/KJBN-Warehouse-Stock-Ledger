@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router'
 import type { ListResponse, LowStockRow, StockCell, ValuationResponse } from '../api/types'
 import { EmptyState, ErrorAlert, Input, PageHeader, Spinner } from '../components/ui'
 import { isZero, toGrid } from '../lib/grid'
@@ -78,7 +79,9 @@ export function StockOverview() {
                   <tr key={r.productId} className={isLow ? 'bg-amber-50' : 'hover:bg-slate-50'}>
                     <td className={`sticky left-0 z-10 min-w-40 px-4 py-2 ${isLow ? 'bg-amber-50' : 'bg-white'}`}>
                       <div className="flex items-center gap-2">
-                        <span className="whitespace-nowrap font-mono">{r.sku}</span>
+                        <Link to={`/products/${r.productId}`} className="whitespace-nowrap font-mono text-emerald-700 hover:underline">
+                          {r.sku}
+                        </Link>
                         {isLow && <span className="rounded bg-amber-200 px-1.5 py-0.5 text-xs font-medium text-amber-900">Low</span>}
                       </div>
                       <div className="text-xs text-slate-500">
