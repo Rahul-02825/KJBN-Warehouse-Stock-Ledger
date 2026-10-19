@@ -18,6 +18,8 @@ const navGroups = [
       { to: '/stock', label: 'Stock overview' },
       { to: '/receive', label: 'Receive' },
       { to: '/ship', label: 'Ship' },
+      { to: '/transfer', label: 'Transfer' },
+      { to: '/adjust', label: 'Adjust' },
     ],
   },
 ]
