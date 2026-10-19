@@ -40,3 +40,17 @@ export interface ReconciliationResponse {
   data: unknown[]
   drift_count: number
 }
+
+export const UNITS = ['pcs', 'kg', 'litre'] as const
+export type Unit = (typeof UNITS)[number]
+
+export interface Product {
+  id: number
+  sku: string
+  name: string
+  unit: Unit
+  reorder_level: Decimal
+  average_cost: Decimal
+  created_at: string
+  updated_at: string
+}
