@@ -13,6 +13,11 @@ type Location struct {
 	Code        string             `json:"code"`
 	Description string             `json:"description"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	WarehouseID int64              `json:"warehouse_id"`
+	X           float64            `json:"x"`
+	Y           float64            `json:"y"`
+	Capacity    pgtype.Int8        `json:"capacity"`
+	AutoPlace   bool               `json:"auto_place"`
 }
 
 type Movement struct {
@@ -58,4 +63,15 @@ type StockBalance struct {
 	LocationID int64              `json:"location_id"`
 	Quantity   pgtype.Numeric     `json:"quantity"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Warehouse struct {
+	ID        int64              `json:"id"`
+	Code      string             `json:"code"`
+	Name      string             `json:"name"`
+	X         float64            `json:"x"`
+	Y         float64            `json:"y"`
+	RadiusM   float64            `json:"radius_m"`
+	Capacity  pgtype.Int8        `json:"capacity"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }

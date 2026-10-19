@@ -25,6 +25,7 @@ type Querier interface {
 	EnsureStockBalanceExists(ctx context.Context, arg EnsureStockBalanceExistsParams) error
 	// Postings per day (Indian Standard Time) for the last N days, including days with none.
 	GetDailyActivity(ctx context.Context, days int32) ([]GetDailyActivityRow, error)
+	GetDefaultWarehouse(ctx context.Context) (Warehouse, error)
 	// Entries of the original, ordered by location so balance locks are always
 	// acquired in the same order (deadlock avoidance).
 	GetEntriesForReversal(ctx context.Context, movementID int64) ([]GetEntriesForReversalRow, error)
@@ -52,10 +53,12 @@ type Querier interface {
 	// Balance for one (product, location) cell. Returns a zero row when no
 	// stock_balances row exists yet, as long as both product and location exist.
 	GetStockBalance(ctx context.Context, arg GetStockBalanceParams) (GetStockBalanceRow, error)
+	GetWarehouseByID(ctx context.Context, id int64) (Warehouse, error)
 	IncreaseStockBalance(ctx context.Context, arg IncreaseStockBalanceParams) (int64, error)
+	ListBinUsage(ctx context.Context, arg ListBinUsageParams) ([]ListBinUsageRow, error)
 	// Balances by location: one row per product that has (or had) stock in this bin.
 	ListLocationBalances(ctx context.Context, locationID int64) ([]ListLocationBalancesRow, error)
-	ListLocations(ctx context.Context) ([]Location, error)
+	ListLocations(ctx context.Context) ([]ListLocationsRow, error)
 	// Products whose total cached balance is at or below their reorder level.
 	ListLowStockProducts(ctx context.Context) ([]ListLowStockProductsRow, error)
 	ListMovementEntries(ctx context.Context, movementID int64) ([]MovementEntry, error)
@@ -82,6 +85,7 @@ type Querier interface {
 	ListStockOverview(ctx context.Context) ([]ListStockOverviewRow, error)
 	// Products ranked by value shipped since a time. Reversed shipments are left out.
 	ListTopMovers(ctx context.Context, arg ListTopMoversParams) ([]ListTopMoversRow, error)
+	ListWarehouses(ctx context.Context) ([]ListWarehousesRow, error)
 	// Lock the original so two concurrent reversal attempts serialise; the
 	// UNIQUE constraint on reversal_of_id is the final guard.
 	LockMovementForReversal(ctx context.Context, id int64) (Movement, error)
@@ -89,11 +93,14 @@ type Querier interface {
 	// before reading quantities for the weighted-average calculation.
 	LockProductForCostUpdate(ctx context.Context, id int64) (Product, error)
 	LockStockBalance(ctx context.Context, arg LockStockBalanceParams) (LockStockBalanceRow, error)
+	LockWarehouse(ctx context.Context, id int64) (Warehouse, error)
+	SetLocationLayout(ctx context.Context, arg SetLocationLayoutParams) error
 	UpdateLocationDescription(ctx context.Context, arg UpdateLocationDescriptionParams) (Location, error)
 	UpdateProductAverageCost(ctx context.Context, arg UpdateProductAverageCostParams) (UpdateProductAverageCostRow, error)
 	// Partial update: NULL arguments leave the column unchanged.
 	// sku and unit are intentionally not updatable once movements may exist.
 	UpdateProductDetails(ctx context.Context, arg UpdateProductDetailsParams) (Product, error)
+	UpsertWarehouse(ctx context.Context, arg UpsertWarehouseParams) (Warehouse, error)
 }
 
 var _ Querier = (*Queries)(nil)

@@ -25,6 +25,9 @@ type product struct {
 
 type location struct {
 	code, description string
+	x, y              float64
+	capacity          int64
+	autoPlace         bool
 }
 
 type opening struct {
@@ -43,13 +46,22 @@ var products = []product{
 	{"GHEE-1", "Ghee 1 litre tin", "litre", "15", "540.00"},
 }
 
+var warehouse = sqlc.UpsertWarehouseParams{
+	Code:     "MAIN",
+	Name:     "Main warehouse",
+	X:        0,
+	Y:        0,
+	RadiusM:  50,
+	Capacity: pgtype.Int8{Int64: 1000, Valid: true},
+}
+
 var locations = []location{
-	{"A-01", "Rack A, bin 1"},
-	{"A-02", "Rack A, bin 2"},
-	{"B-01", "Rack B, bin 1"},
-	{"B-02", "Rack B, bin 2"},
-	{"COLD-01", "Chilled store"},
-	{"DOCK", "Receiving dock"},
+	{"A-01", "Rack A, bin 1", 5, 2, 120, true},
+	{"A-02", "Rack A, bin 2", 5, 8, 100, true},
+	{"B-01", "Rack B, bin 1", 15, 2, 80, true},
+	{"B-02", "Rack B, bin 2", 15, 8, 80, true},
+	{"COLD-01", "Chilled store", 30, 5, 50, true},
+	{"DOCK", "Receiving dock", 0, 0, 0, false},
 }
 
 var openings = []opening{
@@ -94,16 +106,26 @@ func run(ctx context.Context, pool *pgxpool.Pool) error {
 
 	q := sqlc.New(tx)
 
+	main, err := q.UpsertWarehouse(ctx, warehouse)
+	if err != nil {
+		return fmt.Errorf("warehouse: %w", err)
+	}
+
 	locIDs := map[string]int64{}
 	newLocs := 0
 	for _, l := range locations {
 		row, err := q.GetLocationByCode(ctx, l.code)
 		if errors.Is(err, pgx.ErrNoRows) {
-			row, err = q.CreateLocation(ctx, sqlc.CreateLocationParams{Code: l.code, Description: l.description})
+			row, err = q.CreateLocation(ctx, sqlc.CreateLocationParams{Code: l.code, Description: l.description, WarehouseID: main.ID})
 			newLocs++
 		}
 		if err != nil {
 			return fmt.Errorf("location %s: %w", l.code, err)
+		}
+		if err := q.SetLocationLayout(ctx, sqlc.SetLocationLayoutParams{
+			ID: row.ID, X: l.x, Y: l.y, Capacity: binCapacity(l.capacity), AutoPlace: l.autoPlace,
+		}); err != nil {
+			return fmt.Errorf("location %s layout: %w", l.code, err)
 		}
 		locIDs[l.code] = row.ID
 	}
@@ -178,6 +200,10 @@ func postOpening(ctx context.Context, q *sqlc.Queries, productID, locationID int
 	// Every opening receipt for a product uses one cost, so the average equals that cost.
 	_, err = q.UpdateProductAverageCost(ctx, sqlc.UpdateProductAverageCostParams{ID: productID, AverageCost: num(cost)})
 	return err
+}
+
+func binCapacity(n int64) pgtype.Int8 {
+	return pgtype.Int8{Int64: n, Valid: n > 0}
 }
 
 func num(s string) pgtype.Numeric {

@@ -7,33 +7,53 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createLocation = `-- name: CreateLocation :one
-INSERT INTO locations (code, description)
-VALUES ($1, $2)
-RETURNING id, code, description, created_at
+INSERT INTO locations (code, description, warehouse_id, x, y, capacity, auto_place)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, code, description, created_at, warehouse_id, x, y, capacity, auto_place
 `
 
 type CreateLocationParams struct {
-	Code        string `json:"code"`
-	Description string `json:"description"`
+	Code        string      `json:"code"`
+	Description string      `json:"description"`
+	WarehouseID int64       `json:"warehouse_id"`
+	X           float64     `json:"x"`
+	Y           float64     `json:"y"`
+	Capacity    pgtype.Int8 `json:"capacity"`
+	AutoPlace   bool        `json:"auto_place"`
 }
 
 func (q *Queries) CreateLocation(ctx context.Context, arg CreateLocationParams) (Location, error) {
-	row := q.db.QueryRow(ctx, createLocation, arg.Code, arg.Description)
+	row := q.db.QueryRow(ctx, createLocation,
+		arg.Code,
+		arg.Description,
+		arg.WarehouseID,
+		arg.X,
+		arg.Y,
+		arg.Capacity,
+		arg.AutoPlace,
+	)
 	var i Location
 	err := row.Scan(
 		&i.ID,
 		&i.Code,
 		&i.Description,
 		&i.CreatedAt,
+		&i.WarehouseID,
+		&i.X,
+		&i.Y,
+		&i.Capacity,
+		&i.AutoPlace,
 	)
 	return i, err
 }
 
 const getLocationByCode = `-- name: GetLocationByCode :one
-SELECT id, code, description, created_at
+SELECT id, code, description, created_at, warehouse_id, x, y, capacity, auto_place
 FROM locations
 WHERE code = $1
 `
@@ -46,12 +66,17 @@ func (q *Queries) GetLocationByCode(ctx context.Context, code string) (Location,
 		&i.Code,
 		&i.Description,
 		&i.CreatedAt,
+		&i.WarehouseID,
+		&i.X,
+		&i.Y,
+		&i.Capacity,
+		&i.AutoPlace,
 	)
 	return i, err
 }
 
 const getLocationByID = `-- name: GetLocationByID :one
-SELECT id, code, description, created_at
+SELECT id, code, description, created_at, warehouse_id, x, y, capacity, auto_place
 FROM locations
 WHERE id = $1
 `
@@ -64,30 +89,59 @@ func (q *Queries) GetLocationByID(ctx context.Context, id int64) (Location, erro
 		&i.Code,
 		&i.Description,
 		&i.CreatedAt,
+		&i.WarehouseID,
+		&i.X,
+		&i.Y,
+		&i.Capacity,
+		&i.AutoPlace,
 	)
 	return i, err
 }
 
 const listLocations = `-- name: ListLocations :many
-SELECT id, code, description, created_at
-FROM locations
-ORDER BY code
+SELECT
+    l.id, l.code, l.description, l.created_at, l.warehouse_id, l.x, l.y, l.capacity, l.auto_place,
+    COALESCE(SUM(sb.quantity) FILTER (WHERE p.unit = 'pcs'), 0)::BIGINT AS used
+FROM locations l
+LEFT JOIN stock_balances sb ON sb.location_id = l.id
+LEFT JOIN products p ON p.id = sb.product_id
+GROUP BY l.id
+ORDER BY l.code
 `
 
-func (q *Queries) ListLocations(ctx context.Context) ([]Location, error) {
+type ListLocationsRow struct {
+	ID          int64              `json:"id"`
+	Code        string             `json:"code"`
+	Description string             `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	WarehouseID int64              `json:"warehouse_id"`
+	X           float64            `json:"x"`
+	Y           float64            `json:"y"`
+	Capacity    pgtype.Int8        `json:"capacity"`
+	AutoPlace   bool               `json:"auto_place"`
+	Used        int64              `json:"used"`
+}
+
+func (q *Queries) ListLocations(ctx context.Context) ([]ListLocationsRow, error) {
 	rows, err := q.db.Query(ctx, listLocations)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Location{}
+	items := []ListLocationsRow{}
 	for rows.Next() {
-		var i Location
+		var i ListLocationsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Code,
 			&i.Description,
 			&i.CreatedAt,
+			&i.WarehouseID,
+			&i.X,
+			&i.Y,
+			&i.Capacity,
+			&i.AutoPlace,
+			&i.Used,
 		); err != nil {
 			return nil, err
 		}
@@ -99,11 +153,36 @@ func (q *Queries) ListLocations(ctx context.Context) ([]Location, error) {
 	return items, nil
 }
 
+const setLocationLayout = `-- name: SetLocationLayout :exec
+UPDATE locations
+SET x = $2, y = $3, capacity = $4, auto_place = $5
+WHERE id = $1
+`
+
+type SetLocationLayoutParams struct {
+	ID        int64       `json:"id"`
+	X         float64     `json:"x"`
+	Y         float64     `json:"y"`
+	Capacity  pgtype.Int8 `json:"capacity"`
+	AutoPlace bool        `json:"auto_place"`
+}
+
+func (q *Queries) SetLocationLayout(ctx context.Context, arg SetLocationLayoutParams) error {
+	_, err := q.db.Exec(ctx, setLocationLayout,
+		arg.ID,
+		arg.X,
+		arg.Y,
+		arg.Capacity,
+		arg.AutoPlace,
+	)
+	return err
+}
+
 const updateLocationDescription = `-- name: UpdateLocationDescription :one
 UPDATE locations
 SET description = $2
 WHERE id = $1
-RETURNING id, code, description, created_at
+RETURNING id, code, description, created_at, warehouse_id, x, y, capacity, auto_place
 `
 
 type UpdateLocationDescriptionParams struct {
@@ -119,6 +198,11 @@ func (q *Queries) UpdateLocationDescription(ctx context.Context, arg UpdateLocat
 		&i.Code,
 		&i.Description,
 		&i.CreatedAt,
+		&i.WarehouseID,
+		&i.X,
+		&i.Y,
+		&i.Capacity,
+		&i.AutoPlace,
 	)
 	return i, err
 }
