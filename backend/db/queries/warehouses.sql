@@ -5,9 +5,8 @@ SELECT
         SELECT SUM(sb.quantity)
         FROM stock_balances sb
         JOIN locations l ON l.id = sb.location_id
-        JOIN products p ON p.id = sb.product_id
-        WHERE l.warehouse_id = w.id AND p.unit = 'pcs'
-    ), 0)::BIGINT AS used
+        WHERE l.warehouse_id = w.id
+    ), 0)::NUMERIC(18, 4) AS used
 FROM warehouses w
 ORDER BY w.id;
 
@@ -47,11 +46,10 @@ SELECT
     l.y,
     l.capacity,
     l.auto_place,
-    COALESCE(SUM(sb.quantity) FILTER (WHERE p.unit = 'pcs'), 0)::BIGINT AS used,
-    COALESCE(SUM(sb.quantity) FILTER (WHERE sb.product_id = sqlc.arg('product_id')), 0)::BIGINT AS product_quantity
+    COALESCE(SUM(sb.quantity), 0)::NUMERIC(18, 4) AS used,
+    COALESCE(SUM(sb.quantity) FILTER (WHERE sb.product_id = sqlc.arg('product_id')), 0)::NUMERIC(18, 4) AS product_quantity
 FROM locations l
 LEFT JOIN stock_balances sb ON sb.location_id = l.id
-LEFT JOIN products p ON p.id = sb.product_id
 WHERE l.warehouse_id = sqlc.arg('warehouse_id')
 GROUP BY l.id
 ORDER BY l.id;

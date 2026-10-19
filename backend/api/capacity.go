@@ -7,10 +7,24 @@ import (
 	"slices"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
+
+const unitScale = 10000
+
+func toUnits(d decimal.Decimal) int64 { return d.Shift(4).IntPart() }
+
+func fromUnits(n int64) decimal.Decimal { return decimal.New(n, -4) }
+
+func placementStep(unit string) int64 {
+	if unit == "pcs" {
+		return unitScale
+	}
+	return 1
+}
 
 type noSpaceError struct {
 	place     string
@@ -19,20 +33,20 @@ type noSpaceError struct {
 }
 
 func (e noSpaceError) Error() string {
-	return fmt.Sprintf("cannot accommodate %d items in %s: only %d fit", e.requested, e.place, e.fit)
+	return fmt.Sprintf("cannot accommodate %s units in %s: only %s fit", fromUnits(e.requested), e.place, fromUnits(e.fit))
 }
 
-type receiptPlan struct {
+type binPlan struct {
 	Warehouse   sqlc.Warehouse
 	Start       Bin
 	Reason      string
 	Allocations []Allocation
 }
 
-func (p receiptPlan) changes() []change {
+func (p binPlan) changes() []change {
 	out := make([]change, len(p.Allocations))
 	for i, a := range p.Allocations {
-		out[i] = change{locationID: a.Bin.ID, delta: decimal.NewFromInt(a.Quantity)}
+		out[i] = change{locationID: a.Bin.ID, delta: fromUnits(a.Quantity)}
 	}
 	return out
 }
@@ -82,40 +96,50 @@ func loadBins(ctx context.Context, q *sqlc.Queries, warehouseID, productID int64
 			ID:              r.ID,
 			Code:            r.Code,
 			Position:        Point{r.X, r.Y},
-			Capacity:        idPtr(r.Capacity),
-			Used:            r.Used,
-			ProductQuantity: r.ProductQuantity,
+			Capacity:        capacityUnits(r.Capacity),
+			Used:            toUnits(toDecimal(r.Used)),
+			ProductQuantity: toUnits(toDecimal(r.ProductQuantity)),
 			AutoPlace:       r.AutoPlace,
 		}
 	}
 	return bins, nil
 }
 
-func planReceipt(ctx context.Context, q *sqlc.Queries, warehouse sqlc.Warehouse, productID, quantity, locationID int64) (receiptPlan, error) {
-	bins, err := loadBins(ctx, q, warehouse.ID, productID)
-	if err != nil {
-		return receiptPlan{}, err
+func capacityUnits(capacity pgtype.Int8) *int64 {
+	if !capacity.Valid {
+		return nil
 	}
-	place := "warehouse " + warehouse.Code
-	start, reason, ok := startingBin(bins, warehouse, locationID)
-	if !ok {
-		return receiptPlan{}, noSpaceError{place: place, requested: quantity}
-	}
-
-	allocations, fit := Plan(start, bins, quantity)
-	fit = min(fit, warehouseFree(warehouse, bins))
-	if fit < quantity {
-		return receiptPlan{}, noSpaceError{place: place, fit: fit, requested: quantity}
-	}
-	return receiptPlan{Warehouse: warehouse, Start: start, Reason: reason, Allocations: allocations}, nil
+	units := capacity.Int64 * unitScale
+	return &units
 }
 
-func startingBin(bins []Bin, warehouse sqlc.Warehouse, locationID int64) (Bin, string, bool) {
+func planReceipt(ctx context.Context, q *sqlc.Queries, warehouse sqlc.Warehouse, product sqlc.Product, amount decimal.Decimal, locationID int64) (binPlan, error) {
+	bins, err := loadBins(ctx, q, warehouse.ID, product.ID)
+	if err != nil {
+		return binPlan{}, err
+	}
+	quantity := toUnits(amount)
+	step := placementStep(product.Unit)
+	place := "warehouse " + warehouse.Code
+	start, reason, ok := startingBin(bins, warehouse, locationID, step)
+	if !ok {
+		return binPlan{}, noSpaceError{place: place, requested: quantity}
+	}
+
+	allocations, fit := Plan(start, bins, quantity, step)
+	fit = min(fit, warehouseFree(warehouse, bins))
+	if fit < quantity {
+		return binPlan{}, noSpaceError{place: place, fit: fit, requested: quantity}
+	}
+	return binPlan{Warehouse: warehouse, Start: start, Reason: reason, Allocations: allocations}, nil
+}
+
+func startingBin(bins []Bin, warehouse sqlc.Warehouse, locationID, step int64) (Bin, string, bool) {
 	if locationID > 0 {
 		i := slices.IndexFunc(bins, func(b Bin) bool { return b.ID == locationID })
 		return bins[i], ReasonChosen, true
 	}
-	return ChooseStart(bins, Point{warehouse.X, warehouse.Y})
+	return ChooseStart(bins, Point{warehouse.X, warehouse.Y}, step)
 }
 
 func warehouseFree(warehouse sqlc.Warehouse, bins []Bin) int64 {
@@ -126,13 +150,10 @@ func warehouseFree(warehouse sqlc.Warehouse, bins []Bin) int64 {
 	for _, b := range bins {
 		used += b.Used
 	}
-	return max(warehouse.Capacity.Int64-used, 0)
+	return max(warehouse.Capacity.Int64*unitScale-used, 0)
 }
 
 func ensureSpace(ctx context.Context, q *sqlc.Queries, product sqlc.Product, changes []change) error {
-	if product.Unit != "pcs" {
-		return nil
-	}
 	netByWarehouse := map[int64]int64{}
 	addsByWarehouse := map[int64][]change{}
 	for _, c := range changes {
@@ -140,7 +161,7 @@ func ensureSpace(ctx context.Context, q *sqlc.Queries, product sqlc.Product, cha
 		if err != nil {
 			return err
 		}
-		netByWarehouse[location.WarehouseID] += c.delta.IntPart()
+		netByWarehouse[location.WarehouseID] += toUnits(c.delta)
 		if c.delta.IsPositive() {
 			addsByWarehouse[location.WarehouseID] = append(addsByWarehouse[location.WarehouseID], c)
 		}
@@ -171,7 +192,7 @@ func ensureWarehouseSpace(ctx context.Context, q *sqlc.Queries, productID, wareh
 	}
 	for _, c := range adds {
 		bin := bins[slices.IndexFunc(bins, func(b Bin) bool { return b.ID == c.locationID })]
-		if wanted := c.delta.IntPart(); wanted > bin.Free() {
+		if wanted := toUnits(c.delta); wanted > bin.Free() {
 			return noSpaceError{place: "bin " + bin.Code, fit: bin.Free(), requested: wanted}
 		}
 	}

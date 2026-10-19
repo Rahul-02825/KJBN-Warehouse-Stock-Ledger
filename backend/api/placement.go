@@ -42,8 +42,8 @@ type Allocation struct {
 	Distance float64
 }
 
-func ChooseStart(bins []Bin, receiving Point) (Bin, string, bool) {
-	candidates := placeableBins(bins, 0)
+func ChooseStart(bins []Bin, receiving Point, step int64) (Bin, string, bool) {
+	candidates := placeableBins(bins, 0, step)
 	if len(candidates) == 0 {
 		return Bin{}, "", false
 	}
@@ -53,12 +53,13 @@ func ChooseStart(bins []Bin, receiving Point) (Bin, string, bool) {
 	return nearestBin(candidates, receiving), ReasonNearestEntry, true
 }
 
-func Plan(start Bin, bins []Bin, quantity int64) ([]Allocation, int64) {
+func Plan(start Bin, bins []Bin, quantity, step int64) ([]Allocation, int64) {
 	var plan []Allocation
 	remaining := quantity
 
 	place := func(bin Bin) {
 		n := min(remaining, bin.Free())
+		n -= n % step
 		if n > 0 {
 			plan = append(plan, Allocation{Bin: bin, Quantity: n, Distance: Distance(start.Position, bin.Position)})
 			remaining -= n
@@ -66,17 +67,17 @@ func Plan(start Bin, bins []Bin, quantity int64) ([]Allocation, int64) {
 	}
 
 	place(start)
-	nearest := newBinHeap(start.Position, placeableBins(bins, start.ID))
+	nearest := newBinHeap(start.Position, placeableBins(bins, start.ID, step))
 	for remaining > 0 && nearest.Len() > 0 {
 		place(heap.Pop(nearest).(Bin))
 	}
 	return plan, quantity - remaining
 }
 
-func placeableBins(bins []Bin, excludeID int64) []Bin {
+func placeableBins(bins []Bin, excludeID, step int64) []Bin {
 	var out []Bin
 	for _, b := range bins {
-		if b.AutoPlace && b.ID != excludeID && b.Free() > 0 {
+		if b.AutoPlace && b.ID != excludeID && b.Free() >= step {
 			out = append(out, b)
 		}
 	}

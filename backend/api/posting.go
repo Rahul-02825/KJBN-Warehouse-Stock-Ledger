@@ -142,20 +142,28 @@ func (l *Ledger) PostIn(ctx context.Context, req InRequest) (m sqlc.Movement, er
 // PostOut values the shipment at the current average and stores that cost on the movement.
 func (l *Ledger) PostOut(ctx context.Context, req OutRequest) (m sqlc.Movement, err error) {
 	err = l.inTx(ctx, func(q *sqlc.Queries) error {
-		product, location, err := loadProductAndLocation(ctx, q, req.ProductID, req.LocationID, req.Quantity)
+		product, err := lockProduct(ctx, q, req.ProductID, req.Quantity)
+		if err != nil {
+			return err
+		}
+		warehouse, err := resolveWarehouse(ctx, q, req.LocationID, req.WarehouseID, false)
+		if err != nil {
+			return err
+		}
+		plan, err := planPick(ctx, q, warehouse, product, req.Quantity, req.LocationID)
 		if err != nil {
 			return err
 		}
 		m, err = applyChanges(ctx, q, product, sqlc.CreateMovementParams{
 			ProductID:      product.ID,
 			MovementType:   "OUT",
-			FromLocationID: optID(location.ID),
+			FromLocationID: optID(plan.Allocations[0].Bin.ID),
 			Quantity:       toNumeric(req.Quantity),
 			UnitCost:       product.AverageCost,
 			Reference:      req.Reference,
 			CreatedBy:      req.CreatedBy,
 			IdempotencyKey: optText(req.IdempotencyKey),
-		}, []change{{location.ID, req.Quantity.Neg()}})
+		}, plan.pickChanges())
 		return err
 	})
 	return m, err
@@ -388,22 +396,11 @@ func lockProduct(ctx context.Context, q *sqlc.Queries, productID int64, qty deci
 }
 
 func receiptChanges(ctx context.Context, q *sqlc.Queries, product sqlc.Product, req InRequest) (int64, []change, error) {
-	if product.Unit != "pcs" {
-		if req.LocationID == 0 {
-			return 0, nil, validationError{"location_id": "is required for kg and litre products"}
-		}
-		location, err := getLocation(ctx, q, req.LocationID)
-		if err != nil {
-			return 0, nil, err
-		}
-		return location.ID, []change{{location.ID, req.Quantity}}, nil
-	}
-
 	warehouse, err := resolveWarehouse(ctx, q, req.LocationID, req.WarehouseID, true)
 	if err != nil {
 		return 0, nil, err
 	}
-	plan, err := planReceipt(ctx, q, warehouse, product.ID, req.Quantity.IntPart(), req.LocationID)
+	plan, err := planReceipt(ctx, q, warehouse, product, req.Quantity, req.LocationID)
 	if err != nil {
 		return 0, nil, err
 	}
