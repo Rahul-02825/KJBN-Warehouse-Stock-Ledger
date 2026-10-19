@@ -23,6 +23,8 @@ type Querier interface {
 	// Transaction helpers --------------------------------------------------------
 	// Creates the cell if missing so later row locks have something to lock.
 	EnsureStockBalanceExists(ctx context.Context, arg EnsureStockBalanceExistsParams) error
+	// Postings per day (Indian Standard Time) for the last N days, including days with none.
+	GetDailyActivity(ctx context.Context, days int32) ([]GetDailyActivityRow, error)
 	// Entries of the original, ordered by location so balance locks are always
 	// acquired in the same order (deadlock avoidance).
 	GetEntriesForReversal(ctx context.Context, movementID int64) ([]GetEntriesForReversalRow, error)
@@ -34,6 +36,7 @@ type Querier interface {
 	GetLocationByCode(ctx context.Context, code string) (Location, error)
 	GetLocationByID(ctx context.Context, id int64) (Location, error)
 	GetMovementByID(ctx context.Context, id int64) (Movement, error)
+	GetMovementByIdempotencyKey(ctx context.Context, idempotencyKey pgtype.Text) (Movement, error)
 	// Single movement with display names and reversal status.
 	GetMovementDetail(ctx context.Context, id int64) (GetMovementDetailRow, error)
 	GetProductByID(ctx context.Context, id int64) (Product, error)
@@ -59,14 +62,26 @@ type Querier interface {
 	// History with optional filters and offset pagination.
 	// to_date is exclusive so callers can pass "next day 00:00" for a date range.
 	ListMovementHistory(ctx context.Context, arg ListMovementHistoryParams) ([]ListMovementHistoryRow, error)
+	// Every movement in posting order, for replaying the average cost.
+	// net_delta is the movement's total stock effect across all bins.
+	ListMovementsForCostCheck(ctx context.Context) ([]ListMovementsForCostCheckRow, error)
 	// Balances by product: one row per location that holds (or held) this product.
 	ListProductBalances(ctx context.Context, productID int64) ([]ListProductBalancesRow, error)
+	ListProductCosts(ctx context.Context) ([]ListProductCostsRow, error)
 	ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error)
 	// Reconciliation: recompute every (product, location) balance from the ledger
 	// and compare with the cache. Covers cells present on either side. Read-only.
 	ListReconciliation(ctx context.Context, onlyDrift bool) ([]ListReconciliationRow, error)
+	// Products whose current stock is below what was shipped in the same window last year.
+	// Reversed shipments are not demand. Products with no shipments in that window are left out.
+	ListSeasonForecast(ctx context.Context, arg ListSeasonForecastParams) ([]ListSeasonForecastRow, error)
+	// Stock as it was at a point in time, rebuilt from the ledger.
+	// Only cells with a non-zero balance at that time are returned.
+	ListStockAsOf(ctx context.Context, arg ListStockAsOfParams) ([]ListStockAsOfRow, error)
 	// Full grid: every product x every location, zero where no balance row.
 	ListStockOverview(ctx context.Context) ([]ListStockOverviewRow, error)
+	// Products ranked by value shipped since a time. Reversed shipments are left out.
+	ListTopMovers(ctx context.Context, arg ListTopMoversParams) ([]ListTopMoversRow, error)
 	// Lock the original so two concurrent reversal attempts serialise; the
 	// UNIQUE constraint on reversal_of_id is the final guard.
 	LockMovementForReversal(ctx context.Context, id int64) (Movement, error)

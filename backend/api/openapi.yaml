@@ -1,0 +1,474 @@
+openapi: 3.0.3
+info:
+  title: Warehouse Stock Ledger API
+  version: 1.0.0
+  description: |
+    Every stock change is an immutable movement with ledger entries. Balances are a
+    cache of the ledger. Decimals are returned as strings; requests accept strings or numbers.
+    Errors use `{"error": {"code", "message", "fields"?, "details"?}}`.
+servers:
+  - url: /
+tags:
+  - name: Products
+  - name: Locations
+  - name: Inventory
+  - name: Movements
+  - name: Reports
+  - name: Health
+
+paths:
+  /api/products:
+    post:
+      tags: [Products]
+      summary: Create a product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductCreate' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { description: SKU already exists (DUPLICATE), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      tags: [Products]
+      summary: List products
+      parameters:
+        - { name: search, in: query, schema: { type: string }, description: Matches SKU or name }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: One page of products
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Product' } }
+                  page: { type: integer }
+                  page_size: { type: integer }
+                  total: { type: integer }
+
+  /api/products/{id}:
+    parameters: [ { $ref: '#/components/parameters/ID' } ]
+    get:
+      tags: [Products]
+      summary: Get a product
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [Products]
+      summary: Update name and/or reorder level (SKU and unit cannot change)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                reorder_level: { $ref: '#/components/schemas/Decimal' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/products/{id}/balances:
+    parameters: [ { $ref: '#/components/parameters/ID' } ]
+    get:
+      tags: [Inventory]
+      summary: Stock of one product in every bin, with the total
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/products/{id}/ledger:
+    parameters: [ { $ref: '#/components/parameters/ID' } ]
+    get:
+      tags: [Reports]
+      summary: Every ledger entry for a product with running balances
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/locations:
+    post:
+      tags: [Locations]
+      summary: Create a bin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, example: A-01, description: 'Unique, no spaces, max 64' }
+                description: { type: string, maxLength: 500 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Location' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+    get:
+      tags: [Locations]
+      summary: List bins
+      responses:
+        '200':
+          description: All bins
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Location' } }
+
+  /api/locations/{id}:
+    parameters: [ { $ref: '#/components/parameters/ID' } ]
+    get:
+      tags: [Locations]
+      summary: Get a bin
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Location' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/locations/{id}/balances:
+    parameters: [ { $ref: '#/components/parameters/ID' } ]
+    get:
+      tags: [Inventory]
+      summary: Products stored in one bin
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/inventory:
+    get:
+      tags: [Inventory]
+      summary: Stock grid, every product x every bin
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+
+  /api/inventory/as-of:
+    get:
+      tags: [Inventory]
+      summary: Stock at a past moment, rebuilt from the ledger
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string }, description: '2026-10-01 (end of that day, IST) or an RFC 3339 time' }
+        - { name: product_id, in: query, schema: { type: integer } }
+        - { name: location_id, in: query, schema: { type: integer } }
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /api/inventory/{productId}/{locationId}:
+    parameters:
+      - { name: productId, in: path, required: true, schema: { type: integer } }
+      - { name: locationId, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Inventory]
+      summary: Stock of one product in one bin
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/movements/in:
+    post:
+      tags: [Movements]
+      summary: Receive stock (updates the weighted-average cost)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id, location_id, quantity, unit_cost, created_by]
+              properties:
+                product_id: { type: integer }
+                location_id: { type: integer }
+                quantity: { $ref: '#/components/schemas/Decimal' }
+                unit_cost: { $ref: '#/components/schemas/Decimal' }
+                reference: { type: string, example: INV-1001 }
+                created_by: { type: string }
+      responses: &posting
+        '201': { description: Posted, content: { application/json: { schema: { $ref: '#/components/schemas/Movement' } } } }
+        '200': { description: Replayed by Idempotency-Key, content: { application/json: { schema: { $ref: '#/components/schemas/Movement' } } } }
+        '400': { description: 'VALIDATION_ERROR, BAD_REQUEST or OUT_OF_RANGE', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: 'Product, location or movement not found', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: 'INSUFFICIENT_STOCK, ALREADY_REVERSED, NOT_REVERSIBLE or IDEMPOTENCY_KEY_REUSED', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/movements/out:
+    post:
+      tags: [Movements]
+      summary: Ship stock (valued at the current average, frozen on the movement)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id, location_id, quantity, created_by]
+              properties:
+                product_id: { type: integer }
+                location_id: { type: integer }
+                quantity: { $ref: '#/components/schemas/Decimal' }
+                reference: { type: string }
+                created_by: { type: string }
+      responses: *posting
+
+  /api/movements/transfer:
+    post:
+      tags: [Movements]
+      summary: Move stock between two bins (one movement, two entries)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id, from_location_id, to_location_id, quantity, created_by]
+              properties:
+                product_id: { type: integer }
+                from_location_id: { type: integer }
+                to_location_id: { type: integer }
+                quantity: { $ref: '#/components/schemas/Decimal' }
+                reference: { type: string }
+                created_by: { type: string }
+      responses: *posting
+
+  /api/movements/adjustment:
+    post:
+      tags: [Movements]
+      summary: Correct stock after a count or incident (signed quantity)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id, location_id, quantity, reason, created_by]
+              properties:
+                product_id: { type: integer }
+                location_id: { type: integer }
+                quantity: { $ref: '#/components/schemas/Decimal' }
+                reason: { type: string, enum: [damaged, expired, count_correction, theft, other] }
+                note: { type: string, description: Required when reason is other }
+                reference: { type: string }
+                created_by: { type: string }
+      responses: *posting
+
+  /api/movements/{id}/reverse:
+    parameters:
+      - { $ref: '#/components/parameters/ID' }
+      - { $ref: '#/components/parameters/IdempotencyKey' }
+    post:
+      tags: [Movements]
+      summary: Post the inverse of a movement (the original is never changed)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [created_by]
+              properties:
+                note: { type: string }
+                created_by: { type: string }
+      responses: *posting
+
+  /api/movements:
+    get:
+      tags: [Movements]
+      summary: Movement history with filters
+      parameters:
+        - { name: product_id, in: query, schema: { type: integer } }
+        - { name: location_id, in: query, schema: { type: integer } }
+        - { name: type, in: query, schema: { type: string, enum: [IN, OUT, TRANSFER, ADJUSTMENT, REVERSAL] } }
+        - { name: reference, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string }, description: Date (IST) or RFC 3339 }
+        - { name: to, in: query, schema: { type: string }, description: 'Date (inclusive, IST) or RFC 3339' }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Format'
+      responses:
+        '200':
+          description: One page of movements, or a CSV file of all matches with format=csv
+          content:
+            application/json: { schema: { type: object } }
+            text/csv: { schema: { type: string } }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /api/movements/{id}:
+    parameters: [ { $ref: '#/components/parameters/ID' } ]
+    get:
+      tags: [Movements]
+      summary: One movement with its ledger entries
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/reports/low-stock:
+    get:
+      tags: [Reports]
+      summary: Products at or below their reorder level
+      parameters: [ { $ref: '#/components/parameters/Format' } ]
+      responses:
+        '200': { $ref: '#/components/responses/ObjectOrCSV' }
+
+  /api/reports/valuation:
+    get:
+      tags: [Reports]
+      summary: Quantity x average cost per product, with the grand total
+      parameters: [ { $ref: '#/components/parameters/Format' } ]
+      responses:
+        '200': { $ref: '#/components/responses/ObjectOrCSV' }
+
+  /api/reports/reconciliation:
+    get:
+      tags: [Reports]
+      summary: Compare cached balances with ledger totals (read-only)
+      parameters:
+        - { name: only_drift, in: query, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+
+  /api/reports/cost-check:
+    get:
+      tags: [Reports]
+      summary: Replay the ledger and compare each product's average cost (read-only)
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+
+  /api/reports/daily-activity:
+    get:
+      tags: [Reports]
+      summary: Postings and values per day (IST), for charts
+      parameters:
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 30 } }
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /api/reports/top-movers:
+    get:
+      tags: [Reports]
+      summary: Products ranked by value shipped (reversed shipments excluded)
+      parameters:
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 30 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 5 } }
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /api/reports/season-forecast:
+    get:
+      tags: [Reports]
+      summary: Products with less stock than was shipped in the same window last year
+      description: |
+        Compares current stock with OUT quantities (reversed ones excluded) from the
+        same `days` window one year ago. Only products short of last year's demand are
+        listed, largest gap value (gap x average cost) first.
+      parameters:
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 180, default: 30 } }
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /healthz:
+    get:
+      tags: [Health]
+      summary: 200 when the database answers, 503 otherwise
+      responses:
+        '200': { description: ok }
+        '503': { description: unavailable }
+
+components:
+  parameters:
+    ID: { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    Page: { name: page, in: query, schema: { type: integer, default: 1 } }
+    PageSize: { name: page_size, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+    Format: { name: format, in: query, schema: { type: string, enum: [csv] }, description: Download as CSV }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema: { type: string, maxLength: 128 }
+      description: |
+        Optional. Retrying with the same key returns the first movement (200 with
+        header Idempotent-Replayed: true) instead of posting again. Reusing a key for
+        a different request returns 409 IDEMPOTENCY_KEY_REUSED.
+
+  responses:
+    Error:
+      description: Error
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Object:
+      description: OK
+      content: { application/json: { schema: { type: object } } }
+    ObjectOrCSV:
+      description: OK (JSON, or CSV with format=csv)
+      content:
+        application/json: { schema: { type: object } }
+        text/csv: { schema: { type: string } }
+
+  schemas:
+    Decimal:
+      type: string
+      example: '12.5'
+      description: Up to 4 decimal places; whole numbers only for pcs
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            fields: { type: object, additionalProperties: { type: string } }
+            details: { type: object, additionalProperties: { type: string } }
+    ProductCreate:
+      type: object
+      required: [sku, name, unit]
+      properties:
+        sku: { type: string, example: RICE-25 }
+        name: { type: string }
+        unit: { type: string, enum: [pcs, kg, litre] }
+        reorder_level: { $ref: '#/components/schemas/Decimal' }
+    Product:
+      type: object
+      properties:
+        id: { type: integer }
+        sku: { type: string }
+        name: { type: string }
+        unit: { type: string }
+        reorder_level: { $ref: '#/components/schemas/Decimal' }
+        average_cost: { $ref: '#/components/schemas/Decimal' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Location:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        description: { type: string }
+        created_at: { type: string, format: date-time }
+    Movement:
+      type: object
+      properties:
+        id: { type: integer }
+        type: { type: string, enum: [IN, OUT, TRANSFER, ADJUSTMENT, REVERSAL] }
+        product_id: { type: integer }
+        from_location_id: { type: integer, nullable: true }
+        to_location_id: { type: integer, nullable: true }
+        quantity: { $ref: '#/components/schemas/Decimal' }
+        unit_cost: { type: string, nullable: true }
+        total_value: { type: string, nullable: true }
+        reference: { type: string }
+        reason: { type: string, nullable: true }
+        note: { type: string }
+        created_by: { type: string }
+        reverses_movement_id: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }

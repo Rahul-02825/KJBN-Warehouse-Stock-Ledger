@@ -114,3 +114,20 @@ func TestValidReason(t *testing.T) {
 		}
 	}
 }
+
+func TestBackOutAverage(t *testing.T) {
+	d := decimal.RequireFromString
+	// 10 @ 100 then 10 @ 130 gives 115. Backing out the second receipt returns to 100.
+	got, ok := api.BackOutAverage(d("10"), d("115"), d("10"), d("130"))
+	if !ok || !got.Equal(d("100")) {
+		t.Errorf("got %s %v, want 100", got, ok)
+	}
+	// Nothing left: keep the last average.
+	if got, ok := api.BackOutAverage(d("0"), d("115"), d("10"), d("130")); !ok || !got.Equal(d("115")) {
+		t.Errorf("empty: got %s %v, want 115", got, ok)
+	}
+	// The cheap stock is gone, so removing the expensive receipt would make value negative.
+	if _, ok := api.BackOutAverage(d("1"), d("115"), d("10"), d("130")); ok {
+		t.Error("expected not reversible")
+	}
+}

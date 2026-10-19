@@ -24,6 +24,7 @@ func NewInventoryHandler(q *sqlc.Queries) *InventoryHandler {
 
 func (h *InventoryHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/inventory", h.grid)
+	mux.HandleFunc("GET /api/inventory/as-of", h.asOf)
 	mux.HandleFunc("GET /api/inventory/{productId}/{locationId}", h.cell)
 	mux.HandleFunc("GET /api/products/{id}/balances", h.byProduct)
 	mux.HandleFunc("GET /api/locations/{id}/balances", h.byLocation)
@@ -188,4 +189,52 @@ func (h *InventoryHandler) byLocation(w http.ResponseWriter, r *http.Request) {
 		"location_code": location.Code,
 		"data":          data,
 	})
+}
+
+type asOfRow struct {
+	ProductID    int64           `json:"product_id"`
+	SKU          string          `json:"sku"`
+	ProductName  string          `json:"product_name"`
+	Unit         string          `json:"unit"`
+	LocationID   int64           `json:"location_id"`
+	LocationCode string          `json:"location_code"`
+	Quantity     decimal.Decimal `json:"quantity"`
+}
+
+// asOf rebuilds stock at a past moment by summing ledger entries up to it.
+// ?date=2026-10-01 means the end of that day (IST); an RFC 3339 time is exact.
+// Optional product_id and location_id narrow the result.
+func (h *InventoryHandler) asOf(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	fields := map[string]string{}
+	at := optionalTime(fields, query, "date", true)
+	if query.Get("date") == "" {
+		fields["date"] = "is required"
+	}
+	productID := optionalID(fields, query, "product_id")
+	locationID := optionalID(fields, query, "location_id")
+	if !valid(w, fields) {
+		return
+	}
+
+	rows, err := h.q.ListStockAsOf(r.Context(), sqlc.ListStockAsOfParams{
+		AsOf: at, ProductID: productID, LocationID: locationID,
+	})
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+	data := make([]asOfRow, len(rows))
+	for i, c := range rows {
+		data[i] = asOfRow{
+			ProductID:    c.ProductID,
+			SKU:          c.Sku,
+			ProductName:  c.ProductName,
+			Unit:         c.Unit,
+			LocationID:   c.LocationID,
+			LocationCode: c.LocationCode,
+			Quantity:     toDecimal(c.Quantity),
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"as_of": at.Time.UTC(), "data": data})
 }

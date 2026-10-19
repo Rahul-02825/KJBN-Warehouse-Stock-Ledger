@@ -10,12 +10,18 @@ INSERT INTO movements (
     reason,
     note,
     created_by,
-    reversal_of_id
+    reversal_of_id,
+    idempotency_key
 )
 VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
 RETURNING *;
+
+-- name: GetMovementByIdempotencyKey :one
+SELECT *
+FROM movements
+WHERE idempotency_key = $1;
 
 -- name: CreateMovementEntry :one
 INSERT INTO movement_entries (

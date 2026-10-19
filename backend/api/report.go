@@ -3,9 +3,12 @@ package api
 import (
 	"errors"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
@@ -23,6 +26,10 @@ func (h *ReportHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/reports/low-stock", h.lowStock)
 	mux.HandleFunc("GET /api/reports/valuation", h.valuation)
 	mux.HandleFunc("GET /api/reports/reconciliation", h.reconciliation)
+	mux.HandleFunc("GET /api/reports/cost-check", h.costCheck)
+	mux.HandleFunc("GET /api/reports/daily-activity", h.dailyActivity)
+	mux.HandleFunc("GET /api/reports/top-movers", h.topMovers)
+	mux.HandleFunc("GET /api/reports/season-forecast", h.seasonForecast)
 	mux.HandleFunc("GET /api/products/{id}/ledger", h.ledger)
 }
 
@@ -37,6 +44,7 @@ type lowStockRow struct {
 }
 
 // lowStock lists products whose total stock across all bins is at or below the reorder level.
+// ?format=csv downloads it as a spreadsheet.
 func (h *ReportHandler) lowStock(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.q.ListLowStockProducts(r.Context())
 	if err != nil {
@@ -55,6 +63,14 @@ func (h *ReportHandler) lowStock(w http.ResponseWriter, r *http.Request) {
 			Shortfall:     toDecimal(p.Shortfall),
 		}
 	}
+	if r.URL.Query().Get("format") == "csv" {
+		rows := make([][]string, len(data))
+		for i, p := range data {
+			rows[i] = []string{p.SKU, csvText(p.Name), p.Unit, p.ReorderLevel.String(), p.TotalQuantity.String(), p.Shortfall.String()}
+		}
+		writeCSV(w, "low-stock.csv", []string{"sku", "name", "unit", "reorder_level", "total_quantity", "shortfall"}, rows)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})
 }
 
@@ -69,6 +85,7 @@ type valuationRow struct {
 }
 
 // valuation is quantity x average cost per product, plus the grand total.
+// ?format=csv downloads it as a spreadsheet.
 func (h *ReportHandler) valuation(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.q.GetInventoryValuation(r.Context())
 	if err != nil {
@@ -88,6 +105,15 @@ func (h *ReportHandler) valuation(w http.ResponseWriter, r *http.Request) {
 			TotalValue:    toDecimal(p.TotalValue),
 		}
 		total = total.Add(data[i].TotalValue)
+	}
+	if r.URL.Query().Get("format") == "csv" {
+		rows := make([][]string, len(data))
+		for i, p := range data {
+			rows[i] = []string{p.SKU, csvText(p.Name), p.Unit, p.TotalQuantity.String(), p.AverageCost.String(), p.TotalValue.String()}
+		}
+		rows = append(rows, []string{"TOTAL", "", "", "", "", total.String()})
+		writeCSV(w, "valuation.csv", []string{"sku", "name", "unit", "total_quantity", "average_cost", "total_value"}, rows)
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data, "total_value": total})
 }
@@ -191,4 +217,215 @@ func (h *ReportHandler) ledger(w http.ResponseWriter, r *http.Request) {
 		"unit":       product.Unit,
 		"data":       data,
 	})
+}
+
+type costCheckRow struct {
+	ProductID         int64           `json:"product_id"`
+	SKU               string          `json:"sku"`
+	Name              string          `json:"name"`
+	StoredAverage     decimal.Decimal `json:"stored_average"`
+	RecomputedAverage decimal.Decimal `json:"recomputed_average"`
+	Difference        decimal.Decimal `json:"difference"`
+	Matches           bool            `json:"matches"`
+}
+
+// costCheck replays every movement in posting order with the same costing rules
+// used when posting, and compares the result with each product's stored average.
+// Quantity reconciliation cannot catch a wrong average; this can. It only reports.
+func (h *ReportHandler) costCheck(w http.ResponseWriter, r *http.Request) {
+	movements, err := h.q.ListMovementsForCostCheck(r.Context())
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+	products, err := h.q.ListProductCosts(r.Context())
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+
+	qty := map[int64]decimal.Decimal{}
+	avg := map[int64]decimal.Decimal{}
+	for _, m := range movements {
+		id := m.ProductID
+		amount := toDecimal(m.Quantity)
+		switch {
+		case m.MovementType == "IN":
+			avg[id] = WeightedAverage(qty[id], avg[id], amount, toDecimal(m.UnitCost))
+			qty[id] = qty[id].Add(amount)
+		case m.MovementType == "REVERSAL" && m.ReversedType == "IN":
+			qty[id] = qty[id].Sub(amount)
+			avg[id], _ = BackOutAverage(qty[id], avg[id], amount, toDecimal(m.UnitCost))
+		default: // OUT, TRANSFER, ADJUSTMENT and other reversals change stock, not the average
+			qty[id] = qty[id].Add(toDecimal(m.NetDelta))
+		}
+	}
+
+	mismatches := 0
+	data := make([]costCheckRow, len(products))
+	for i, p := range products {
+		stored := toDecimal(p.AverageCost)
+		data[i] = costCheckRow{
+			ProductID:         p.ID,
+			SKU:               p.Sku,
+			Name:              p.Name,
+			StoredAverage:     stored,
+			RecomputedAverage: avg[p.ID],
+			Difference:        stored.Sub(avg[p.ID]),
+			Matches:           stored.Equal(avg[p.ID]),
+		}
+		if !data[i].Matches {
+			mismatches++
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": data, "mismatch_count": mismatches})
+}
+
+type activityRow struct {
+	Day             string          `json:"day"`
+	InCount         int64           `json:"in_count"`
+	OutCount        int64           `json:"out_count"`
+	TransferCount   int64           `json:"transfer_count"`
+	AdjustmentCount int64           `json:"adjustment_count"`
+	ReversalCount   int64           `json:"reversal_count"`
+	InValue         decimal.Decimal `json:"in_value"`
+	OutValue        decimal.Decimal `json:"out_value"`
+}
+
+// dailyActivity counts postings per day for the dashboard chart. ?days=30 (1 to 365).
+func (h *ReportHandler) dailyActivity(w http.ResponseWriter, r *http.Request) {
+	fields := map[string]string{}
+	days := intParam(fields, r.URL.Query(), "days", 30, 1, 365)
+	if !valid(w, fields) {
+		return
+	}
+	rows, err := h.q.GetDailyActivity(r.Context(), int32(days))
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+	data := make([]activityRow, len(rows))
+	for i, d := range rows {
+		data[i] = activityRow{
+			Day:             d.Day.Time.Format("2006-01-02"),
+			InCount:         d.InCount,
+			OutCount:        d.OutCount,
+			TransferCount:   d.TransferCount,
+			AdjustmentCount: d.AdjustmentCount,
+			ReversalCount:   d.ReversalCount,
+			InValue:         toDecimal(d.InValue),
+			OutValue:        toDecimal(d.OutValue),
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": data})
+}
+
+type topMoverRow struct {
+	ProductID       int64           `json:"product_id"`
+	SKU             string          `json:"sku"`
+	Name            string          `json:"name"`
+	Unit            string          `json:"unit"`
+	Shipments       int64           `json:"shipments"`
+	ShippedQuantity decimal.Decimal `json:"shipped_quantity"`
+	ShippedValue    decimal.Decimal `json:"shipped_value"`
+}
+
+// topMovers ranks products by value shipped in the last ?days=30, top ?limit=5.
+func (h *ReportHandler) topMovers(w http.ResponseWriter, r *http.Request) {
+	fields := map[string]string{}
+	days := intParam(fields, r.URL.Query(), "days", 30, 1, 365)
+	limit := intParam(fields, r.URL.Query(), "limit", 5, 1, 50)
+	if !valid(w, fields) {
+		return
+	}
+	now := time.Now().In(ist)
+	since := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, ist).AddDate(0, 0, -(days - 1))
+
+	rows, err := h.q.ListTopMovers(r.Context(), sqlc.ListTopMoversParams{
+		Since:   pgtype.Timestamptz{Time: since, Valid: true},
+		MaxRows: int32(limit),
+	})
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+	data := make([]topMoverRow, len(rows))
+	for i, p := range rows {
+		data[i] = topMoverRow{
+			ProductID:       p.ProductID,
+			SKU:             p.Sku,
+			Name:            p.Name,
+			Unit:            p.Unit,
+			Shipments:       p.Shipments,
+			ShippedQuantity: toDecimal(p.ShippedQuantity),
+			ShippedValue:    toDecimal(p.ShippedValue),
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": data, "since": since})
+}
+
+type forecastRow struct {
+	ProductID      int64           `json:"product_id"`
+	SKU            string          `json:"sku"`
+	Name           string          `json:"name"`
+	Unit           string          `json:"unit"`
+	LastYearDemand decimal.Decimal `json:"last_year_demand"`
+	CurrentStock   decimal.Decimal `json:"current_stock"`
+	Gap            decimal.Decimal `json:"gap"`
+	AverageCost    decimal.Decimal `json:"average_cost"`
+	GapValue       decimal.Decimal `json:"gap_value"`
+}
+
+// seasonForecast compares current stock with what was shipped in the same
+// ?days=30 window last year, so stock can be bought before the season starts.
+func (h *ReportHandler) seasonForecast(w http.ResponseWriter, r *http.Request) {
+	fields := map[string]string{}
+	days := intParam(fields, r.URL.Query(), "days", 30, 1, 180)
+	if !valid(w, fields) {
+		return
+	}
+	start := time.Now().AddDate(-1, 0, 0)
+	end := start.AddDate(0, 0, days)
+
+	rows, err := h.q.ListSeasonForecast(r.Context(), sqlc.ListSeasonForecastParams{
+		WindowStart: pgtype.Timestamptz{Time: start, Valid: true},
+		WindowEnd:   pgtype.Timestamptz{Time: end, Valid: true},
+	})
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+	data := make([]forecastRow, len(rows))
+	for i, p := range rows {
+		data[i] = forecastRow{
+			ProductID:      p.ProductID,
+			SKU:            p.Sku,
+			Name:           p.Name,
+			Unit:           p.Unit,
+			LastYearDemand: toDecimal(p.LastYearDemand),
+			CurrentStock:   toDecimal(p.CurrentStock),
+			Gap:            toDecimal(p.Gap),
+			AverageCost:    toDecimal(p.AverageCost),
+			GapValue:       toDecimal(p.GapValue),
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"window_start": start.UTC(),
+		"window_end":   end.UTC(),
+		"data":         data,
+	})
+}
+
+// intParam reads an optional whole-number query value within [min, max].
+func intParam(fields map[string]string, query url.Values, name string, def, min, max int) int {
+	raw := query.Get(name)
+	if raw == "" {
+		return def
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < min || n > max {
+		fields[name] = "must be a whole number from " + strconv.Itoa(min) + " to " + strconv.Itoa(max)
+		return def
+	}
+	return n
 }

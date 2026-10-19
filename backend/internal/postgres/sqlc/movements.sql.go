@@ -65,12 +65,13 @@ INSERT INTO movements (
     reason,
     note,
     created_by,
-    reversal_of_id
+    reversal_of_id,
+    idempotency_key
 )
 VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
-RETURNING id, product_id, movement_type, from_location_id, to_location_id, quantity, unit_cost, reference, reason, note, created_by, reversal_of_id, created_at
+RETURNING id, product_id, movement_type, from_location_id, to_location_id, quantity, unit_cost, reference, reason, note, created_by, reversal_of_id, created_at, idempotency_key
 `
 
 type CreateMovementParams struct {
@@ -85,6 +86,7 @@ type CreateMovementParams struct {
 	Note           string         `json:"note"`
 	CreatedBy      string         `json:"created_by"`
 	ReversalOfID   pgtype.Int8    `json:"reversal_of_id"`
+	IdempotencyKey pgtype.Text    `json:"idempotency_key"`
 }
 
 func (q *Queries) CreateMovement(ctx context.Context, arg CreateMovementParams) (Movement, error) {
@@ -100,6 +102,7 @@ func (q *Queries) CreateMovement(ctx context.Context, arg CreateMovementParams) 
 		arg.Note,
 		arg.CreatedBy,
 		arg.ReversalOfID,
+		arg.IdempotencyKey,
 	)
 	var i Movement
 	err := row.Scan(
@@ -116,6 +119,7 @@ func (q *Queries) CreateMovement(ctx context.Context, arg CreateMovementParams) 
 		&i.CreatedBy,
 		&i.ReversalOfID,
 		&i.CreatedAt,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }
@@ -162,7 +166,7 @@ func (q *Queries) CreateMovementEntry(ctx context.Context, arg CreateMovementEnt
 }
 
 const getMovementByID = `-- name: GetMovementByID :one
-SELECT id, product_id, movement_type, from_location_id, to_location_id, quantity, unit_cost, reference, reason, note, created_by, reversal_of_id, created_at
+SELECT id, product_id, movement_type, from_location_id, to_location_id, quantity, unit_cost, reference, reason, note, created_by, reversal_of_id, created_at, idempotency_key
 FROM movements
 WHERE id = $1
 `
@@ -184,13 +188,42 @@ func (q *Queries) GetMovementByID(ctx context.Context, id int64) (Movement, erro
 		&i.CreatedBy,
 		&i.ReversalOfID,
 		&i.CreatedAt,
+		&i.IdempotencyKey,
+	)
+	return i, err
+}
+
+const getMovementByIdempotencyKey = `-- name: GetMovementByIdempotencyKey :one
+SELECT id, product_id, movement_type, from_location_id, to_location_id, quantity, unit_cost, reference, reason, note, created_by, reversal_of_id, created_at, idempotency_key
+FROM movements
+WHERE idempotency_key = $1
+`
+
+func (q *Queries) GetMovementByIdempotencyKey(ctx context.Context, idempotencyKey pgtype.Text) (Movement, error) {
+	row := q.db.QueryRow(ctx, getMovementByIdempotencyKey, idempotencyKey)
+	var i Movement
+	err := row.Scan(
+		&i.ID,
+		&i.ProductID,
+		&i.MovementType,
+		&i.FromLocationID,
+		&i.ToLocationID,
+		&i.Quantity,
+		&i.UnitCost,
+		&i.Reference,
+		&i.Reason,
+		&i.Note,
+		&i.CreatedBy,
+		&i.ReversalOfID,
+		&i.CreatedAt,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
 const getMovementDetail = `-- name: GetMovementDetail :one
 SELECT
-    m.id, m.product_id, m.movement_type, m.from_location_id, m.to_location_id, m.quantity, m.unit_cost, m.reference, m.reason, m.note, m.created_by, m.reversal_of_id, m.created_at,
+    m.id, m.product_id, m.movement_type, m.from_location_id, m.to_location_id, m.quantity, m.unit_cost, m.reference, m.reason, m.note, m.created_by, m.reversal_of_id, m.created_at, m.idempotency_key,
     p.sku,
     p.name AS product_name,
     p.unit,
@@ -220,6 +253,7 @@ type GetMovementDetailRow struct {
 	CreatedBy        string             `json:"created_by"`
 	ReversalOfID     pgtype.Int8        `json:"reversal_of_id"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
 	Sku              string             `json:"sku"`
 	ProductName      string             `json:"product_name"`
 	Unit             string             `json:"unit"`
@@ -247,6 +281,7 @@ func (q *Queries) GetMovementDetail(ctx context.Context, id int64) (GetMovementD
 		&i.CreatedBy,
 		&i.ReversalOfID,
 		&i.CreatedAt,
+		&i.IdempotencyKey,
 		&i.Sku,
 		&i.ProductName,
 		&i.Unit,
@@ -384,7 +419,7 @@ func (q *Queries) ListMovementEntries(ctx context.Context, movementID int64) ([]
 
 const listMovementHistory = `-- name: ListMovementHistory :many
 SELECT
-    m.id, m.product_id, m.movement_type, m.from_location_id, m.to_location_id, m.quantity, m.unit_cost, m.reference, m.reason, m.note, m.created_by, m.reversal_of_id, m.created_at,
+    m.id, m.product_id, m.movement_type, m.from_location_id, m.to_location_id, m.quantity, m.unit_cost, m.reference, m.reason, m.note, m.created_by, m.reversal_of_id, m.created_at, m.idempotency_key,
     p.sku,
     p.name AS product_name,
     p.unit,
@@ -440,6 +475,7 @@ type ListMovementHistoryRow struct {
 	CreatedBy        string             `json:"created_by"`
 	ReversalOfID     pgtype.Int8        `json:"reversal_of_id"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
 	Sku              string             `json:"sku"`
 	ProductName      string             `json:"product_name"`
 	Unit             string             `json:"unit"`
@@ -483,6 +519,7 @@ func (q *Queries) ListMovementHistory(ctx context.Context, arg ListMovementHisto
 			&i.CreatedBy,
 			&i.ReversalOfID,
 			&i.CreatedAt,
+			&i.IdempotencyKey,
 			&i.Sku,
 			&i.ProductName,
 			&i.Unit,
