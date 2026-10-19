@@ -3,8 +3,8 @@ import { Link, useParams } from 'react-router'
 import type { ListResponse, Location, MovementDetail } from '../api/types'
 import { Delta, MovementBadge } from '../components/MovementBadge'
 import { ReversePanel } from '../components/ReversePanel'
-import { Table, Td } from '../components/Table'
-import { Card, EmptyState, ErrorAlert, PageHeader, Spinner } from '../components/ui'
+import { Row, Table, Td } from '../components/Table'
+import { EmptyState, ErrorAlert, Eyebrow, Spinner } from '../components/ui'
 import { formatDateTime, formatDecimal, formatMoney, formatQuantity } from '../lib/format'
 import { useApi } from '../lib/useApi'
 
@@ -15,10 +15,8 @@ export function MovementDetailPage() {
 
   if (error?.code === 'NOT_FOUND' || error?.code === 'BAD_REQUEST') {
     return (
-      <EmptyState title="Movement not found">
-        <Link to="/movements" className="text-emerald-700 underline">
-          Back to history
-        </Link>
+      <EmptyState title="Movement not found" action={<Link to="/movements" className="link text-sm">Back to movement history</Link>}>
+        It may have been typed wrongly. Movements are never deleted.
       </EmptyState>
     )
   }
@@ -29,71 +27,78 @@ export function MovementDetailPage() {
 
   return (
     <>
-      <Link to="/movements" className="text-sm text-emerald-700 hover:underline">
-        ← Movement history
+      <Link to="/movements" className="link text-sm">
+        Movement history
       </Link>
-      <PageHeader title={`Movement #${m.id}`} description={formatDateTime(m.created_at)} />
+      <header className="mb-8 mt-6">
+        <Eyebrow className="mb-4">{formatDateTime(m.created_at)}</Eyebrow>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-[clamp(30px,4.4vw,48px)] font-semibold leading-[1.06] tracking-[-0.025em]">Movement #{m.id}</h1>
+          <MovementBadge type={m.type} />
+        </div>
+        <p className="mt-3 text-[15.5px] text-muted">
+          {formatQuantity(m.quantity, m.unit)} of{' '}
+          <Link to={`/products/${m.product_id}`} className="link">
+            {m.sku}, {m.product_name}
+          </Link>
+        </p>
+      </header>
 
       {m.is_reversed && m.reversed_by_id && (
-        <div className="mb-4 rounded-md border border-slate-300 bg-slate-100 p-3 text-sm">
-          This movement was reversed by{' '}
-          <Link to={`/movements/${m.reversed_by_id}`} className="font-semibold text-emerald-700 underline">
+        <p className="mb-6 border-l-2 border-saffron pl-4 text-sm">
+          Reversed by{' '}
+          <Link to={`/movements/${m.reversed_by_id}`} className="link">
             movement #{m.reversed_by_id}
           </Link>
-          . It stays in history unchanged.
-        </div>
+          . This record stays in history unchanged.
+        </p>
       )}
       {m.reverses_movement_id && (
-        <div className="mb-4 rounded-md border border-slate-300 bg-slate-100 p-3 text-sm">
-          This is a reversal of{' '}
-          <Link to={`/movements/${m.reverses_movement_id}`} className="font-semibold text-emerald-700 underline">
+        <p className="mb-6 border-l-2 border-saffron pl-4 text-sm">
+          This undoes{' '}
+          <Link to={`/movements/${m.reverses_movement_id}`} className="link">
             movement #{m.reverses_movement_id}
           </Link>
           .
-        </div>
+        </p>
       )}
 
+      <dl className="mb-12 grid gap-x-8 gap-y-5 border-y border-line py-6 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <Item label="From bin">
+          <span className="code">{m.from_location_code ?? '–'}</span>
+        </Item>
+        <Item label="To bin">
+          <span className="code">{m.to_location_code ?? '–'}</span>
+        </Item>
+        <Item label="Unit cost">
+          <span className="num">{formatMoney(m.unit_cost)}</span>
+        </Item>
+        <Item label="Total value">
+          <span className="num">{formatMoney(m.total_value)}</span>
+        </Item>
+        <Item label="Reference">{m.reference || '–'}</Item>
+        <Item label="Reason">{m.reason?.replace('_', ' ') ?? '–'}</Item>
+        <Item label="Note">{m.note || '–'}</Item>
+        <Item label="Posted by">{m.created_by}</Item>
+      </dl>
+
+      <section className="mb-12">
+        <h2 className="mb-1 font-serif text-[clamp(22px,2.6vw,30px)] leading-tight">Ledger entries</h2>
+        <p className="mb-4 text-sm text-muted">What this movement did to each bin. A transfer or a split receipt touches more than one.</p>
+        <Table head={['Bin', 'Change', 'Unit cost']} numeric={[1, 2]}>
+          {(m.entries ?? []).map((e) => (
+            <Row key={e.location_id}>
+              <Td className="code">{binCode(e.location_id)}</Td>
+              <Td numeric>
+                <Delta value={formatDecimal(e.quantity_delta)} />
+              </Td>
+              <Td numeric>{formatMoney(e.unit_cost)}</Td>
+            </Row>
+          ))}
+        </Table>
+      </section>
+
       <ReversePanel key={m.id} movement={m} onReversed={reload} />
-
-      <Card className="mb-6">
-        <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          <Item label="Type">
-            <MovementBadge type={m.type} />
-          </Item>
-          <Item label="Product">
-            <Link to={`/products/${m.product_id}`} className="text-emerald-700 hover:underline">
-              {m.sku} · {m.product_name}
-            </Link>
-          </Item>
-          <Item label="Quantity">{formatQuantity(m.quantity, m.unit)}</Item>
-          <Item label="From bin">
-            <span className="font-mono">{m.from_location_code ?? '—'}</span>
-          </Item>
-          <Item label="To bin">
-            <span className="font-mono">{m.to_location_code ?? '—'}</span>
-          </Item>
-          <Item label="Unit cost">{formatMoney(m.unit_cost)}</Item>
-          <Item label="Total value">{formatMoney(m.total_value)}</Item>
-          <Item label="Reference">{m.reference || '—'}</Item>
-          <Item label="Reason">{m.reason?.replace('_', ' ') ?? '—'}</Item>
-          <Item label="Note">{m.note || '—'}</Item>
-          <Item label="Posted by">{m.created_by}</Item>
-        </dl>
-      </Card>
-
-      <h2 className="mb-1 text-lg font-semibold">Ledger entries</h2>
-      <p className="mb-3 text-sm text-slate-500">The stock effect of this movement on each bin. A transfer has two entries.</p>
-      <Table head={['Bin', 'Change', 'Unit cost']} numeric={[1, 2]}>
-        {(m.entries ?? []).map((e) => (
-          <tr key={e.location_id}>
-            <Td className="font-mono">{binCode(e.location_id)}</Td>
-            <Td className="text-right">
-              <Delta value={formatDecimal(e.quantity_delta)} />
-            </Td>
-            <Td className="text-right tabular-nums">{formatMoney(e.unit_cost)}</Td>
-          </tr>
-        ))}
-      </Table>
     </>
   )
 }
@@ -101,8 +106,8 @@ export function MovementDetailPage() {
 function Item({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="mt-0.5 font-medium">{children}</dd>
+      <dt className="text-[12.5px] text-muted">{label}</dt>
+      <dd className="mt-1 font-medium">{children}</dd>
     </div>
   )
 }
