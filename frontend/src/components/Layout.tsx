@@ -5,7 +5,13 @@ import { HealthBadge } from './HealthBadge'
 // Nav entries are added here as each page is built.
 const navGroups = [
   { title: 'Overview', links: [{ to: '/', label: 'Dashboard' }] },
-  { title: 'Setup', links: [{ to: '/products', label: 'Products' }] },
+  {
+    title: 'Setup',
+    links: [
+      { to: '/products', label: 'Products' },
+      { to: '/locations', label: 'Locations' },
+    ],
+  },
 ]
 
 export function Layout() {

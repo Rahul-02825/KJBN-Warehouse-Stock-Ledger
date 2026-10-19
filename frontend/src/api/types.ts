@@ -54,3 +54,10 @@ export interface Product {
   created_at: string
   updated_at: string
 }
+
+export interface Location {
+  id: number
+  code: string
+  description: string
+  created_at: string
+}
