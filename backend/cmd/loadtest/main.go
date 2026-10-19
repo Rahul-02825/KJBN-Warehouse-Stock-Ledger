@@ -29,7 +29,7 @@ func main() {
 
 	run := time.Now().Format("150405")
 	product := create("/api/products", map[string]any{"sku": "LOAD-" + run, "name": "Load test item", "unit": "pcs"})
-	location := create("/api/locations", map[string]any{"code": "LOAD-" + run})
+	location := create("/api/locations", map[string]any{"code": "LOAD-" + run, "auto_place": false})
 	post("/api/movements/in", "", map[string]any{
 		"product_id": product, "location_id": location, "quantity": *stock, "unit_cost": "10", "created_by": "loadtest",
 	})

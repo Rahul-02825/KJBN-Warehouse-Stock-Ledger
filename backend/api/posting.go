@@ -106,7 +106,11 @@ type change struct {
 
 func (l *Ledger) PostIn(ctx context.Context, req InRequest) (m sqlc.Movement, err error) {
 	err = l.inTx(ctx, func(q *sqlc.Queries) error {
-		product, location, err := loadProductAndLocation(ctx, q, req.ProductID, req.LocationID, req.Quantity)
+		product, err := lockProduct(ctx, q, req.ProductID, req.Quantity)
+		if err != nil {
+			return err
+		}
+		startID, changes, err := receiptChanges(ctx, q, product, req)
 		if err != nil {
 			return err
 		}
@@ -116,16 +120,16 @@ func (l *Ledger) PostIn(ctx context.Context, req InRequest) (m sqlc.Movement, er
 		}
 		newAvg := WeightedAverage(toDecimal(oldQty), toDecimal(product.AverageCost), req.Quantity, req.UnitCost)
 
-		m, err = applyChanges(ctx, q, sqlc.CreateMovementParams{
+		m, err = applyChanges(ctx, q, product, sqlc.CreateMovementParams{
 			ProductID:      product.ID,
 			MovementType:   "IN",
-			ToLocationID:   optID(location.ID),
+			ToLocationID:   optID(startID),
 			Quantity:       toNumeric(req.Quantity),
 			UnitCost:       toNumeric(req.UnitCost),
 			Reference:      req.Reference,
 			CreatedBy:      req.CreatedBy,
 			IdempotencyKey: optText(req.IdempotencyKey),
-		}, []change{{location.ID, req.Quantity}})
+		}, changes)
 		if err != nil {
 			return err
 		}
@@ -142,7 +146,7 @@ func (l *Ledger) PostOut(ctx context.Context, req OutRequest) (m sqlc.Movement, 
 		if err != nil {
 			return err
 		}
-		m, err = applyChanges(ctx, q, sqlc.CreateMovementParams{
+		m, err = applyChanges(ctx, q, product, sqlc.CreateMovementParams{
 			ProductID:      product.ID,
 			MovementType:   "OUT",
 			FromLocationID: optID(location.ID),
@@ -169,7 +173,7 @@ func (l *Ledger) PostTransfer(ctx context.Context, req TransferRequest) (m sqlc.
 		if err != nil {
 			return err
 		}
-		m, err = applyChanges(ctx, q, sqlc.CreateMovementParams{
+		m, err = applyChanges(ctx, q, product, sqlc.CreateMovementParams{
 			ProductID:      product.ID,
 			MovementType:   "TRANSFER",
 			FromLocationID: optID(from.ID),
@@ -209,7 +213,7 @@ func (l *Ledger) PostAdjustment(ctx context.Context, req AdjustmentRequest) (m s
 		} else {
 			row.FromLocationID = optID(location.ID)
 		}
-		m, err = applyChanges(ctx, q, row, []change{{location.ID, req.Quantity}})
+		m, err = applyChanges(ctx, q, product, row, []change{{location.ID, req.Quantity}})
 		return err
 	})
 	return m, err
@@ -253,7 +257,7 @@ func (l *Ledger) PostReversal(ctx context.Context, movementID int64, req Reverse
 			changes = append(changes, change{e.LocationID, toDecimal(e.QuantityDelta).Neg()})
 		}
 
-		m, err = applyChanges(ctx, q, sqlc.CreateMovementParams{
+		m, err = applyChanges(ctx, q, product, sqlc.CreateMovementParams{
 			ProductID:      product.ID,
 			MovementType:   "REVERSAL",
 			FromLocationID: original.ToLocationID,
@@ -285,8 +289,11 @@ func (l *Ledger) PostReversal(ctx context.Context, movementID int64, req Reverse
 // ledger entry per change. Balance and ledger are always written together.
 // The product is already locked, so a retry with the same key waits here and
 // then finds the first posting.
-func applyChanges(ctx context.Context, q *sqlc.Queries, row sqlc.CreateMovementParams, changes []change) (sqlc.Movement, error) {
+func applyChanges(ctx context.Context, q *sqlc.Queries, product sqlc.Product, row sqlc.CreateMovementParams, changes []change) (sqlc.Movement, error) {
 	if err := checkKey(ctx, q, row.IdempotencyKey.String); err != nil {
+		return sqlc.Movement{}, err
+	}
+	if err := ensureSpace(ctx, q, product, changes); err != nil {
 		return sqlc.Movement{}, err
 	}
 	for _, c := range changes {
@@ -355,10 +362,7 @@ func (l *Ledger) inTx(ctx context.Context, fn func(q *sqlc.Queries) error) error
 // loadProductAndLocation locks the product, checks the location exists, and
 // rejects fractional quantities for products measured in pieces.
 func loadProductAndLocation(ctx context.Context, q *sqlc.Queries, productID, locationID int64, qty decimal.Decimal) (sqlc.Product, sqlc.Location, error) {
-	product, err := q.LockProductForCostUpdate(ctx, productID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return sqlc.Product{}, sqlc.Location{}, notFoundError{"product"}
-	}
+	product, err := lockProduct(ctx, q, productID, qty)
 	if err != nil {
 		return sqlc.Product{}, sqlc.Location{}, err
 	}
@@ -366,10 +370,44 @@ func loadProductAndLocation(ctx context.Context, q *sqlc.Queries, productID, loc
 	if err != nil {
 		return sqlc.Product{}, sqlc.Location{}, err
 	}
-	if product.Unit == "pcs" && !qty.Equal(qty.Truncate(0)) {
-		return sqlc.Product{}, sqlc.Location{}, validationError{"quantity": "must be a whole number for pcs"}
-	}
 	return product, location, nil
+}
+
+func lockProduct(ctx context.Context, q *sqlc.Queries, productID int64, qty decimal.Decimal) (sqlc.Product, error) {
+	product, err := q.LockProductForCostUpdate(ctx, productID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sqlc.Product{}, notFoundError{"product"}
+	}
+	if err != nil {
+		return sqlc.Product{}, err
+	}
+	if product.Unit == "pcs" && !qty.Equal(qty.Truncate(0)) {
+		return sqlc.Product{}, validationError{"quantity": "must be a whole number for pcs"}
+	}
+	return product, nil
+}
+
+func receiptChanges(ctx context.Context, q *sqlc.Queries, product sqlc.Product, req InRequest) (int64, []change, error) {
+	if product.Unit != "pcs" {
+		if req.LocationID == 0 {
+			return 0, nil, validationError{"location_id": "is required for kg and litre products"}
+		}
+		location, err := getLocation(ctx, q, req.LocationID)
+		if err != nil {
+			return 0, nil, err
+		}
+		return location.ID, []change{{location.ID, req.Quantity}}, nil
+	}
+
+	warehouse, err := resolveWarehouse(ctx, q, req.LocationID, req.WarehouseID, true)
+	if err != nil {
+		return 0, nil, err
+	}
+	plan, err := planReceipt(ctx, q, warehouse, product.ID, req.Quantity.IntPart(), req.LocationID)
+	if err != nil {
+		return 0, nil, err
+	}
+	return plan.Start.ID, plan.changes(), nil
 }
 
 func getLocation(ctx context.Context, q *sqlc.Queries, id int64) (sqlc.Location, error) {
