@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
 import type { ListResponse, Location, MovementDetail } from '../api/types'
 import { Delta, MovementBadge } from '../components/MovementBadge'
+import { ReversePanel } from '../components/ReversePanel'
 import { Table, Td } from '../components/Table'
 import { Card, EmptyState, ErrorAlert, PageHeader, Spinner } from '../components/ui'
 import { formatDateTime, formatDecimal, formatMoney, formatQuantity } from '../lib/format'
@@ -51,6 +52,8 @@ export function MovementDetailPage() {
           .
         </div>
       )}
+
+      <ReversePanel key={m.id} movement={m} onReversed={reload} />
 
       <Card className="mb-6">
         <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
