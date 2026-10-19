@@ -3,10 +3,8 @@ import { EmptyState } from '../components/ui'
 
 export function NotFound() {
   return (
-    <EmptyState title="Page not found">
-      <Link to="/" className="text-emerald-700 underline">
-        Back to the dashboard
-      </Link>
+    <EmptyState title="This page does not exist" action={<Link to="/" className="link text-sm">Go to the overview</Link>}>
+      The link may be old. Everything is reachable from the bar at the top.
     </EmptyState>
   )
 }

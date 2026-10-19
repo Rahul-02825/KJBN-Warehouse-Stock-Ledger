@@ -1,5 +1,106 @@
 @import "tailwindcss";
 
-body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+@theme {
+  --color-paper: #F6F3EB;
+  --color-paper-2: #EFE9DC;
+  --color-field: #FBF9F4;
+  --color-ink: #10302B;
+  --color-muted: #5C6A60;
+  --color-petrol: #0C3B3B;
+  --color-petrol-line: #2C6363;
+  --color-saffron: #D8820F;
+  --color-saffron-soft: rgb(216 130 15 / 0.14);
+  --color-saffron-ink: #9A5C08;
+  --color-line: #E6DECE;
+  --color-on-petrol: #EFF5F2;
+  --color-on-petrol-strong: #F2F7F4;
+  --color-on-petrol-muted: rgb(214 232 226 / 0.6);
+
+  --color-success: #2F6B4F;
+  --color-success-soft: #E3EEE6;
+  --color-danger: #A63D2F;
+  --color-danger-soft: #F4E1DC;
+  --color-sage: #8A9A7B;
+  --color-sand: #C9B48A;
+
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --radius-btn: 3px;
+  --radius-panel: 10px;
+
+  --ease-kjbn: cubic-bezier(.22, .61, .36, 1);
+
+  --animate-reveal: reveal 0.85s var(--ease-kjbn) both;
+
+  @keyframes reveal {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    font-size: 15px;
+    line-height: 1.6;
+    letter-spacing: -0.006em;
+    font-feature-settings: "kern" 1, "liga" 1;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E");
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-saffron);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: var(--color-saffron-soft);
+    color: var(--color-ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
+
+@layer components {
+  .link {
+    @apply text-ink border-b border-saffron pb-px transition-colors duration-200 hover:text-petrol;
+  }
+
+  .link-quiet {
+    @apply text-ink underline decoration-transparent decoration-1 underline-offset-4 transition-colors duration-200 hover:text-petrol hover:decoration-saffron;
+  }
+
+  .code {
+    @apply font-mono text-[12.5px] tracking-[0.02em];
+  }
+
+  .num {
+    font-variant-numeric: lining-nums tabular-nums;
+  }
 }
