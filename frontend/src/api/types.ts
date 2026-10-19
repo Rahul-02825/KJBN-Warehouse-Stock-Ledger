@@ -1,0 +1,42 @@
+// Response shapes from the backend. Decimals arrive as strings and stay strings:
+// the UI never does money or quantity arithmetic with JavaScript numbers.
+
+export type Decimal = string
+
+export interface ListResponse<T> {
+  data: T[]
+}
+
+export interface PagedResponse<T> extends ListResponse<T> {
+  page: number
+  page_size: number
+  total: number
+}
+
+export interface LowStockRow {
+  product_id: number
+  sku: string
+  name: string
+  unit: string
+  reorder_level: Decimal
+  total_quantity: Decimal
+  shortfall: Decimal
+}
+
+export interface ValuationResponse {
+  data: {
+    product_id: number
+    sku: string
+    name: string
+    unit: string
+    total_quantity: Decimal
+    average_cost: Decimal
+    total_value: Decimal
+  }[]
+  total_value: Decimal
+}
+
+export interface ReconciliationResponse {
+  data: unknown[]
+  drift_count: number
+}
