@@ -11,6 +11,7 @@ servers:
 tags:
   - name: Products
   - name: Locations
+  - name: Warehouses
   - name: Inventory
   - name: Movements
   - name: Reports
@@ -107,6 +108,11 @@ paths:
               properties:
                 code: { type: string, example: A-01, description: 'Unique, no spaces, max 64' }
                 description: { type: string, maxLength: 500 }
+                warehouse_id: { type: integer, description: Defaults to the first warehouse }
+                x: { type: number, description: Metres; must be within the warehouse perimeter }
+                y: { type: number }
+                capacity: { type: integer, minimum: 1, nullable: true, description: 'Items (pcs) the bin holds; empty means no limit; at most the warehouse capacity' }
+                auto_place: { type: boolean, default: true, description: Whether automatic placement may use this bin }
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Location' } } } }
         '400': { $ref: '#/components/responses/Error' }
@@ -123,6 +129,39 @@ paths:
                 type: object
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/Location' } }
+
+  /api/warehouses:
+    get:
+      tags: [Warehouses]
+      summary: Warehouses with perimeter, capacity and pcs in use
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+
+  /api/placements/preview:
+    post:
+      tags: [Warehouses]
+      summary: Show where a pcs receipt would be placed, without posting
+      description: |
+        Fills the starting bin, then the nearest bins with space (straight-line distance
+        from the starting bin). Without location_id the start is the bin holding the most
+        of the product, else the bin nearest the warehouse receiving point.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id, quantity]
+              properties:
+                product_id: { type: integer }
+                quantity: { type: string, example: '30' }
+                location_id: { type: integer }
+                warehouse_id: { type: integer }
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { description: NO_SPACE with fit and requested details, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/locations/{id}:
     parameters: [ { $ref: '#/components/parameters/ID' } ]
@@ -175,7 +214,7 @@ paths:
   /api/movements/in:
     post:
       tags: [Movements]
-      summary: Receive stock (updates the weighted-average cost)
+      summary: Receive stock (updates the weighted-average cost; pcs are placed across bins by capacity)
       parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
       requestBody:
         required: true
@@ -183,10 +222,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [product_id, location_id, quantity, unit_cost, created_by]
+              required: [product_id, quantity, unit_cost, created_by]
               properties:
                 product_id: { type: integer }
-                location_id: { type: integer }
+                location_id: { type: integer, description: 'Starting bin; optional for pcs (chosen automatically), required for kg and litre' }
+                warehouse_id: { type: integer, description: Used when no location_id is given }
                 quantity: { $ref: '#/components/schemas/Decimal' }
                 unit_cost: { $ref: '#/components/schemas/Decimal' }
                 reference: { type: string, example: INV-1001 }
@@ -196,7 +236,7 @@ paths:
         '200': { description: Replayed by Idempotency-Key, content: { application/json: { schema: { $ref: '#/components/schemas/Movement' } } } }
         '400': { description: 'VALIDATION_ERROR, BAD_REQUEST or OUT_OF_RANGE', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: 'Product, location or movement not found', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '409': { description: 'INSUFFICIENT_STOCK, ALREADY_REVERSED, NOT_REVERSIBLE or IDEMPOTENCY_KEY_REUSED', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: 'INSUFFICIENT_STOCK, NO_SPACE, ALREADY_REVERSED, NOT_REVERSIBLE or IDEMPOTENCY_KEY_REUSED', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/movements/out:
     post:
@@ -454,6 +494,12 @@ components:
         id: { type: integer }
         code: { type: string }
         description: { type: string }
+        warehouse_id: { type: integer }
+        x: { type: number }
+        y: { type: number }
+        capacity: { type: integer, nullable: true }
+        auto_place: { type: boolean }
+        used: { type: integer, description: Items (pcs) stored; list endpoint only }
         created_at: { type: string, format: date-time }
     Movement:
       type: object

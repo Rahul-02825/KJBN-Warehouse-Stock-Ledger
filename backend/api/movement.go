@@ -37,19 +37,21 @@ func (h *MovementHandler) Register(mux *http.ServeMux) {
 // Requests. Each validate method trims text fields and returns one message per invalid field.
 
 type InRequest struct {
-	ProductID  int64           `json:"product_id"`
-	LocationID int64           `json:"location_id"`
-	Quantity   decimal.Decimal `json:"quantity"`
-	UnitCost   decimal.Decimal `json:"unit_cost"`
-	Reference  string          `json:"reference"`
-	CreatedBy  string          `json:"created_by"`
+	ProductID   int64           `json:"product_id"`
+	LocationID  int64           `json:"location_id"`
+	WarehouseID int64           `json:"warehouse_id"`
+	Quantity    decimal.Decimal `json:"quantity"`
+	UnitCost    decimal.Decimal `json:"unit_cost"`
+	Reference   string          `json:"reference"`
+	CreatedBy   string          `json:"created_by"`
 
 	IdempotencyKey string `json:"-"` // from the Idempotency-Key header
 }
 
 func (r *InRequest) validate() map[string]string {
 	f := map[string]string{}
-	checkIDs(f, map[string]int64{"product_id": r.ProductID, "location_id": r.LocationID})
+	checkIDs(f, map[string]int64{"product_id": r.ProductID})
+	checkOptionalIDs(f, map[string]int64{"location_id": r.LocationID, "warehouse_id": r.WarehouseID})
 	checkAmount(f, "quantity", r.Quantity)
 	checkAmount(f, "unit_cost", r.UnitCost)
 	r.Reference, r.CreatedBy = checkText(f, r.Reference, r.CreatedBy)
@@ -371,6 +373,7 @@ func writePostingError(w http.ResponseWriter, r *http.Request, err error) {
 	var nf notFoundError
 	var is insufficientStockError
 	var nr notReversibleError
+	var ns noSpaceError
 
 	switch {
 	case errors.As(err, &ve):
@@ -387,6 +390,12 @@ func writePostingError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusConflict, "ALREADY_REVERSED", err.Error())
 	case errors.As(err, &nr):
 		writeError(w, http.StatusConflict, "NOT_REVERSIBLE", nr.Error())
+	case errors.As(err, &ns):
+		writeJSON(w, http.StatusConflict, map[string]errorBody{"error": {
+			Code:    "NO_SPACE",
+			Message: ns.Error(),
+			Details: map[string]string{"fit": strconv.FormatInt(ns.fit, 10), "requested": strconv.FormatInt(ns.requested, 10)},
+		}})
 	case isNumericOverflow(err):
 		writeError(w, http.StatusBadRequest, "OUT_OF_RANGE", "a resulting quantity or value is too large")
 	default:
@@ -480,6 +489,14 @@ func checkIDs(fields map[string]string, ids map[string]int64) {
 	for name, id := range ids {
 		if id < 1 {
 			fields[name] = "is required and must be a positive integer"
+		}
+	}
+}
+
+func checkOptionalIDs(fields map[string]string, ids map[string]int64) {
+	for name, id := range ids {
+		if id < 0 {
+			fields[name] = "must be a positive integer"
 		}
 	}
 }

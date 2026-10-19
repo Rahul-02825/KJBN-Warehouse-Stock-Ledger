@@ -14,6 +14,7 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 	mux := http.NewServeMux()
 	NewProductHandler(q).Register(mux)
 	NewLocationHandler(q).Register(mux)
+	NewWarehouseHandler(q).Register(mux)
 	NewInventoryHandler(q).Register(mux)
 	NewMovementHandler(q, NewLedger(pool)).Register(mux)
 	NewReportHandler(q).Register(mux)
