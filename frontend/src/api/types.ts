@@ -227,3 +227,9 @@ export interface ReconciliationResponse {
   data: ReconciliationRow[]
   drift_count: number
 }
+
+export interface LocationBalances {
+  location_id: number
+  location_code: string
+  data: { product_id: number; sku: string; product_name: string; unit: Unit; quantity: Decimal; average_cost: Decimal; updated_at: string }[]
+}
