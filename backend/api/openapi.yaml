@@ -163,6 +163,31 @@ paths:
         '404': { $ref: '#/components/responses/Error' }
         '409': { description: NO_SPACE with fit and requested details, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
+  /api/picks/preview:
+    post:
+      tags: [Warehouses]
+      summary: Show which bins a shipment would be picked from, without posting
+      description: |
+        Takes from the starting bin, then the nearest bins that hold the product. Without
+        location_id the start is the bin holding the most of the product.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id, quantity]
+              properties:
+                product_id: { type: integer }
+                quantity: { type: string, example: '120' }
+                location_id: { type: integer }
+                warehouse_id: { type: integer }
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { description: INSUFFICIENT_STOCK with available and requested details, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
   /api/locations/{id}:
     parameters: [ { $ref: '#/components/parameters/ID' } ]
     get:
@@ -241,7 +266,7 @@ paths:
   /api/movements/out:
     post:
       tags: [Movements]
-      summary: Ship stock (valued at the current average, frozen on the movement)
+      summary: Ship stock (picked from several bins if needed; valued at the current average, frozen on the movement)
       parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
       requestBody:
         required: true
@@ -249,10 +274,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [product_id, location_id, quantity, created_by]
+              required: [product_id, quantity, created_by]
               properties:
                 product_id: { type: integer }
-                location_id: { type: integer }
+                location_id: { type: integer, description: 'Bin to pick from first; the rest comes from the nearest bins holding the product' }
+                warehouse_id: { type: integer, description: Used when no location_id is given }
                 quantity: { $ref: '#/components/schemas/Decimal' }
                 reference: { type: string }
                 created_by: { type: string }

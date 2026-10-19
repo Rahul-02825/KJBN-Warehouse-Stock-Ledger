@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"math"
 	"net/http"
@@ -21,7 +22,8 @@ func NewWarehouseHandler(q *sqlc.Queries) *WarehouseHandler {
 
 func (h *WarehouseHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/warehouses", h.list)
-	mux.HandleFunc("POST /api/placements/preview", h.preview)
+	mux.HandleFunc("POST /api/placements/preview", h.previewPlacement)
+	mux.HandleFunc("POST /api/picks/preview", h.previewPick)
 }
 
 type warehouseResponse struct {
@@ -73,7 +75,17 @@ type allocationResponse struct {
 	DistanceM  float64         `json:"distance_m"`
 }
 
-func (h *WarehouseHandler) preview(w http.ResponseWriter, r *http.Request) {
+type planner func(ctx context.Context, q *sqlc.Queries, warehouse sqlc.Warehouse, product sqlc.Product, amount decimal.Decimal, locationID int64) (binPlan, error)
+
+func (h *WarehouseHandler) previewPlacement(w http.ResponseWriter, r *http.Request) {
+	h.preview(w, r, planReceipt)
+}
+
+func (h *WarehouseHandler) previewPick(w http.ResponseWriter, r *http.Request) {
+	h.preview(w, r, planPick)
+}
+
+func (h *WarehouseHandler) preview(w http.ResponseWriter, r *http.Request, plan planner) {
 	var req PreviewRequest
 	if !readJSON(w, r, &req) || !valid(w, req.validate()) {
 		return
@@ -97,14 +109,14 @@ func (h *WarehouseHandler) preview(w http.ResponseWriter, r *http.Request) {
 		writePostingError(w, r, err)
 		return
 	}
-	plan, err := planReceipt(r.Context(), h.q, warehouse, product, req.Quantity, req.LocationID)
+	result, err := plan(r.Context(), h.q, warehouse, product, req.Quantity, req.LocationID)
 	if err != nil {
 		writePostingError(w, r, err)
 		return
 	}
 
-	allocations := make([]allocationResponse, len(plan.Allocations))
-	for i, a := range plan.Allocations {
+	allocations := make([]allocationResponse, len(result.Allocations))
+	for i, a := range result.Allocations {
 		allocations[i] = allocationResponse{
 			LocationID: a.Bin.ID,
 			Code:       a.Bin.Code,
@@ -115,9 +127,9 @@ func (h *WarehouseHandler) preview(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"warehouse_id":        warehouse.ID,
 		"unit":                product.Unit,
-		"start_location_id":   plan.Start.ID,
-		"start_location_code": plan.Start.Code,
-		"reason":              plan.Reason,
+		"start_location_id":   result.Start.ID,
+		"start_location_code": result.Start.Code,
+		"reason":              result.Reason,
 		"allocations":         allocations,
 	})
 }

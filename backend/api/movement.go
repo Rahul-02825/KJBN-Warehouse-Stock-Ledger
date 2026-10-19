@@ -59,18 +59,20 @@ func (r *InRequest) validate() map[string]string {
 }
 
 type OutRequest struct {
-	ProductID  int64           `json:"product_id"`
-	LocationID int64           `json:"location_id"`
-	Quantity   decimal.Decimal `json:"quantity"`
-	Reference  string          `json:"reference"`
-	CreatedBy  string          `json:"created_by"`
+	ProductID   int64           `json:"product_id"`
+	LocationID  int64           `json:"location_id"`
+	WarehouseID int64           `json:"warehouse_id"`
+	Quantity    decimal.Decimal `json:"quantity"`
+	Reference   string          `json:"reference"`
+	CreatedBy   string          `json:"created_by"`
 
 	IdempotencyKey string `json:"-"`
 }
 
 func (r *OutRequest) validate() map[string]string {
 	f := map[string]string{}
-	checkIDs(f, map[string]int64{"product_id": r.ProductID, "location_id": r.LocationID})
+	checkIDs(f, map[string]int64{"product_id": r.ProductID})
+	checkOptionalIDs(f, map[string]int64{"location_id": r.LocationID, "warehouse_id": r.WarehouseID})
 	checkAmount(f, "quantity", r.Quantity)
 	r.Reference, r.CreatedBy = checkText(f, r.Reference, r.CreatedBy)
 	return f

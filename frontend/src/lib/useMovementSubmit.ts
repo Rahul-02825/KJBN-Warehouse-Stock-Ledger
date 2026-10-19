@@ -36,7 +36,7 @@ export function useMovementSubmit(path: string) {
       if (e.code === 'VALIDATION_ERROR') setErrors(e.fields)
       else if (e.code === 'INSUFFICIENT_STOCK') {
         const u = unit ? ` ${unit}` : ''
-        setErrors({ quantity: `Only ${e.details.available}${u} available in this bin; you asked for ${e.details.requested}${u}.` })
+        setErrors({ quantity: `Only ${e.details.available}${u} available; you asked for ${e.details.requested}${u}. Nothing was posted.` })
       } else if (e.code === 'NO_SPACE') {
         setErrors({ quantity: `Not enough space: only ${e.details.fit} of ${e.details.requested} units fit. Nothing was posted.` })
       } else setServerError(e)

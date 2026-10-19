@@ -36,14 +36,14 @@ func (e noSpaceError) Error() string {
 	return fmt.Sprintf("cannot accommodate %s units in %s: only %s fit", fromUnits(e.requested), e.place, fromUnits(e.fit))
 }
 
-type receiptPlan struct {
+type binPlan struct {
 	Warehouse   sqlc.Warehouse
 	Start       Bin
 	Reason      string
 	Allocations []Allocation
 }
 
-func (p receiptPlan) changes() []change {
+func (p binPlan) changes() []change {
 	out := make([]change, len(p.Allocations))
 	for i, a := range p.Allocations {
 		out[i] = change{locationID: a.Bin.ID, delta: fromUnits(a.Quantity)}
@@ -113,25 +113,25 @@ func capacityUnits(capacity pgtype.Int8) *int64 {
 	return &units
 }
 
-func planReceipt(ctx context.Context, q *sqlc.Queries, warehouse sqlc.Warehouse, product sqlc.Product, amount decimal.Decimal, locationID int64) (receiptPlan, error) {
+func planReceipt(ctx context.Context, q *sqlc.Queries, warehouse sqlc.Warehouse, product sqlc.Product, amount decimal.Decimal, locationID int64) (binPlan, error) {
 	bins, err := loadBins(ctx, q, warehouse.ID, product.ID)
 	if err != nil {
-		return receiptPlan{}, err
+		return binPlan{}, err
 	}
 	quantity := toUnits(amount)
 	step := placementStep(product.Unit)
 	place := "warehouse " + warehouse.Code
 	start, reason, ok := startingBin(bins, warehouse, locationID, step)
 	if !ok {
-		return receiptPlan{}, noSpaceError{place: place, requested: quantity}
+		return binPlan{}, noSpaceError{place: place, requested: quantity}
 	}
 
 	allocations, fit := Plan(start, bins, quantity, step)
 	fit = min(fit, warehouseFree(warehouse, bins))
 	if fit < quantity {
-		return receiptPlan{}, noSpaceError{place: place, fit: fit, requested: quantity}
+		return binPlan{}, noSpaceError{place: place, fit: fit, requested: quantity}
 	}
-	return receiptPlan{Warehouse: warehouse, Start: start, Reason: reason, Allocations: allocations}, nil
+	return binPlan{Warehouse: warehouse, Start: start, Reason: reason, Allocations: allocations}, nil
 }
 
 func startingBin(bins []Bin, warehouse sqlc.Warehouse, locationID, step int64) (Bin, string, bool) {
