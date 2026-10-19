@@ -1,39 +1,17 @@
-package api
+package httpapi
 
 import (
-	"errors"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
-type ReportHandler struct {
-	q *sqlc.Queries
-}
-
-func NewReportHandler(q *sqlc.Queries) *ReportHandler {
-	return &ReportHandler{q: q}
-}
-
-func (h *ReportHandler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/reports/low-stock", h.lowStock)
-	mux.HandleFunc("GET /api/reports/valuation", h.valuation)
-	mux.HandleFunc("GET /api/reports/reconciliation", h.reconciliation)
-	mux.HandleFunc("GET /api/reports/cost-check", h.costCheck)
-	mux.HandleFunc("GET /api/reports/daily-activity", h.dailyActivity)
-	mux.HandleFunc("GET /api/reports/top-movers", h.topMovers)
-	mux.HandleFunc("GET /api/reports/season-forecast", h.seasonForecast)
-	mux.HandleFunc("GET /api/products/{id}/ledger", h.ledger)
-}
-
-type lowStockRow struct {
+type lowStockJSON struct {
 	ProductID     int64           `json:"product_id"`
 	SKU           string          `json:"sku"`
 	Name          string          `json:"name"`
@@ -43,24 +21,24 @@ type lowStockRow struct {
 	Shortfall     decimal.Decimal `json:"shortfall"`
 }
 
-// lowStock lists products whose total stock across all bins is at or below the reorder level.
+// lowStockReport lists products whose total stock across all bins is at or below the reorder level.
 // ?format=csv downloads it as a spreadsheet.
-func (h *ReportHandler) lowStock(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.q.ListLowStockProducts(r.Context())
+func (s *Server) lowStockReport(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.q.ListLowStockProducts(r.Context())
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
 		return
 	}
-	data := make([]lowStockRow, len(rows))
+	data := make([]lowStockJSON, len(rows))
 	for i, p := range rows {
-		data[i] = lowStockRow{
+		data[i] = lowStockJSON{
 			ProductID:     p.ProductID,
 			SKU:           p.Sku,
 			Name:          p.Name,
 			Unit:          p.Unit,
-			ReorderLevel:  toDecimal(p.ReorderLevel),
-			TotalQuantity: toDecimal(p.TotalQuantity),
-			Shortfall:     toDecimal(p.Shortfall),
+			ReorderLevel:  p.ReorderLevel,
+			TotalQuantity: p.TotalQuantity,
+			Shortfall:     p.Shortfall,
 		}
 	}
 	if r.URL.Query().Get("format") == "csv" {
@@ -74,7 +52,7 @@ func (h *ReportHandler) lowStock(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})
 }
 
-type valuationRow struct {
+type valuationJSON struct {
 	ProductID     int64           `json:"product_id"`
 	SKU           string          `json:"sku"`
 	Name          string          `json:"name"`
@@ -84,25 +62,25 @@ type valuationRow struct {
 	TotalValue    decimal.Decimal `json:"total_value"`
 }
 
-// valuation is quantity x average cost per product, plus the grand total.
+// valuationReport is quantity x average cost per product, plus the grand total.
 // ?format=csv downloads it as a spreadsheet.
-func (h *ReportHandler) valuation(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.q.GetInventoryValuation(r.Context())
+func (s *Server) valuationReport(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.q.GetInventoryValuation(r.Context())
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
 		return
 	}
 	total := decimal.Zero
-	data := make([]valuationRow, len(rows))
+	data := make([]valuationJSON, len(rows))
 	for i, p := range rows {
-		data[i] = valuationRow{
+		data[i] = valuationJSON{
 			ProductID:     p.ProductID,
 			SKU:           p.Sku,
 			Name:          p.Name,
 			Unit:          p.Unit,
-			TotalQuantity: toDecimal(p.TotalQuantity),
-			AverageCost:   toDecimal(p.AverageCost),
-			TotalValue:    toDecimal(p.TotalValue),
+			TotalQuantity: p.TotalQuantity,
+			AverageCost:   p.AverageCost,
+			TotalValue:    p.TotalValue,
 		}
 		total = total.Add(data[i].TotalValue)
 	}
@@ -118,7 +96,7 @@ func (h *ReportHandler) valuation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": data, "total_value": total})
 }
 
-type reconciliationRow struct {
+type reconciliationJSON struct {
 	ProductID      int64           `json:"product_id"`
 	SKU            string          `json:"sku"`
 	LocationID     int64           `json:"location_id"`
@@ -128,27 +106,27 @@ type reconciliationRow struct {
 	Difference     decimal.Decimal `json:"difference"`
 }
 
-// reconciliation recomputes every balance from the ledger and compares it with
+// reconciliationReport recomputes every balance from the ledger and compares it with
 // the cached balance. It only reports; it never changes data.
 // ?only_drift=true returns just the rows that differ.
-func (h *ReportHandler) reconciliation(w http.ResponseWriter, r *http.Request) {
+func (s *Server) reconciliationReport(w http.ResponseWriter, r *http.Request) {
 	onlyDrift := r.URL.Query().Get("only_drift") == "true"
-	rows, err := h.q.ListReconciliation(r.Context(), onlyDrift)
+	rows, err := s.q.ListReconciliation(r.Context(), onlyDrift)
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
 		return
 	}
 	driftCount := 0
-	data := make([]reconciliationRow, len(rows))
+	data := make([]reconciliationJSON, len(rows))
 	for i, c := range rows {
-		data[i] = reconciliationRow{
+		data[i] = reconciliationJSON{
 			ProductID:      c.ProductID,
 			SKU:            c.Sku,
 			LocationID:     c.LocationID,
 			LocationCode:   c.LocationCode,
-			CachedQuantity: toDecimal(c.CachedQuantity),
-			LedgerQuantity: toDecimal(c.LedgerQuantity),
-			Difference:     toDecimal(c.Difference),
+			CachedQuantity: c.CachedQuantity,
+			LedgerQuantity: c.LedgerQuantity,
+			Difference:     c.Difference,
 		}
 		if !data[i].Difference.IsZero() {
 			driftCount++
@@ -157,7 +135,7 @@ func (h *ReportHandler) reconciliation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": data, "drift_count": driftCount})
 }
 
-type ledgerRow struct {
+type ledgerEntryJSON struct {
 	MovementID      int64            `json:"movement_id"`
 	CreatedAt       time.Time        `json:"created_at"`
 	Type            string           `json:"type"`
@@ -172,43 +150,40 @@ type ledgerRow struct {
 	RunningLocation decimal.Decimal  `json:"running_location_balance"`
 }
 
-// ledger lists every stock change for a product, oldest first, with running
+// productLedger lists every stock change for a product, oldest first, with running
 // balances, so any current quantity can be explained line by line.
-func (h *ReportHandler) ledger(w http.ResponseWriter, r *http.Request) {
-	id, ok := readID(w, r)
-	if !ok {
-		return
-	}
-	product, err := h.q.GetProductByID(r.Context(), id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "product not found")
-		return
-	}
+func (s *Server) productLedger(w http.ResponseWriter, r *http.Request) {
+	id, err := readID(r, "id")
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
 		return
 	}
-	rows, err := h.q.GetProductLedger(r.Context(), id)
+	product, err := s.findProduct(r, id)
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
+		return
+	}
+	rows, err := s.q.GetProductLedger(r.Context(), id)
+	if err != nil {
+		writeError(w, r, err)
 		return
 	}
 
-	data := make([]ledgerRow, len(rows))
+	data := make([]ledgerEntryJSON, len(rows))
 	for i, e := range rows {
-		data[i] = ledgerRow{
+		data[i] = ledgerEntryJSON{
 			MovementID:      e.MovementID,
-			CreatedAt:       e.CreatedAt.Time.UTC(),
+			CreatedAt:       e.CreatedAt.UTC(),
 			Type:            e.MovementType,
 			Reference:       e.Reference,
-			Reason:          textPtr(e.Reason),
+			Reason:          e.Reason,
 			CreatedBy:       e.CreatedBy,
 			LocationID:      e.LocationID,
 			LocationCode:    e.LocationCode,
-			QuantityDelta:   toDecimal(e.QuantityDelta),
-			UnitCost:        numPtr(e.UnitCost),
-			RunningTotal:    toDecimal(e.RunningTotal),
-			RunningLocation: toDecimal(e.RunningLocationBalance),
+			QuantityDelta:   e.QuantityDelta,
+			UnitCost:        e.UnitCost,
+			RunningTotal:    e.RunningTotal,
+			RunningLocation: e.RunningLocationBalance,
 		}
 	}
 	if r.URL.Query().Get("format") == "csv" {
@@ -223,7 +198,7 @@ func (h *ReportHandler) ledger(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func writeLedgerCSV(w http.ResponseWriter, product sqlc.Product, data []ledgerRow) {
+func writeLedgerCSV(w http.ResponseWriter, product sqlc.Product, data []ledgerEntryJSON) {
 	rows := make([][]string, len(data))
 	for i, e := range data {
 		rows[i] = []string{
@@ -237,69 +212,16 @@ func writeLedgerCSV(w http.ResponseWriter, product sqlc.Product, data []ledgerRo
 	}, rows)
 }
 
-type costCheckRow struct {
-	ProductID         int64           `json:"product_id"`
-	SKU               string          `json:"sku"`
-	Name              string          `json:"name"`
-	StoredAverage     decimal.Decimal `json:"stored_average"`
-	RecomputedAverage decimal.Decimal `json:"recomputed_average"`
-	Difference        decimal.Decimal `json:"difference"`
-	Matches           bool            `json:"matches"`
-}
-
-// costCheck replays every movement in posting order with the same costing rules
-// used when posting, and compares the result with each product's stored average.
-// Quantity reconciliation cannot catch a wrong average; this can. It only reports.
-func (h *ReportHandler) costCheck(w http.ResponseWriter, r *http.Request) {
-	movements, err := h.q.ListMovementsForCostCheck(r.Context())
+func (s *Server) costCheckReport(w http.ResponseWriter, r *http.Request) {
+	rows, mismatches, err := s.ledger.CostCheck(r.Context())
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
 		return
 	}
-	products, err := h.q.ListProductCosts(r.Context())
-	if err != nil {
-		writeInternalError(w, err)
-		return
-	}
-
-	qty := map[int64]decimal.Decimal{}
-	avg := map[int64]decimal.Decimal{}
-	for _, m := range movements {
-		id := m.ProductID
-		amount := toDecimal(m.Quantity)
-		switch {
-		case m.MovementType == "IN":
-			avg[id] = WeightedAverage(qty[id], avg[id], amount, toDecimal(m.UnitCost))
-			qty[id] = qty[id].Add(amount)
-		case m.MovementType == "REVERSAL" && m.ReversedType == "IN":
-			qty[id] = qty[id].Sub(amount)
-			avg[id], _ = BackOutAverage(qty[id], avg[id], amount, toDecimal(m.UnitCost))
-		default: // OUT, TRANSFER, ADJUSTMENT and other reversals change stock, not the average
-			qty[id] = qty[id].Add(toDecimal(m.NetDelta))
-		}
-	}
-
-	mismatches := 0
-	data := make([]costCheckRow, len(products))
-	for i, p := range products {
-		stored := toDecimal(p.AverageCost)
-		data[i] = costCheckRow{
-			ProductID:         p.ID,
-			SKU:               p.Sku,
-			Name:              p.Name,
-			StoredAverage:     stored,
-			RecomputedAverage: avg[p.ID],
-			Difference:        stored.Sub(avg[p.ID]),
-			Matches:           stored.Equal(avg[p.ID]),
-		}
-		if !data[i].Matches {
-			mismatches++
-		}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": data, "mismatch_count": mismatches})
+	writeJSON(w, http.StatusOK, map[string]any{"data": rows, "mismatch_count": mismatches})
 }
 
-type activityRow struct {
+type activityJSON struct {
 	Day             string          `json:"day"`
 	InCount         int64           `json:"in_count"`
 	OutCount        int64           `json:"out_count"`
@@ -310,35 +232,36 @@ type activityRow struct {
 	OutValue        decimal.Decimal `json:"out_value"`
 }
 
-// dailyActivity counts postings per day for the dashboard chart. ?days=30 (1 to 365).
-func (h *ReportHandler) dailyActivity(w http.ResponseWriter, r *http.Request) {
+// dailyActivityReport counts postings per day for the dashboard chart. ?days=30 (1 to 365).
+func (s *Server) dailyActivityReport(w http.ResponseWriter, r *http.Request) {
 	fields := map[string]string{}
-	days := intParam(fields, r.URL.Query(), "days", 30, 1, 365)
-	if !valid(w, fields) {
+	days := queryInt(fields, r.URL.Query(), "days", 30, 1, 365)
+	if len(fields) > 0 {
+		writeError(w, r, domain.ValidationError(fields))
 		return
 	}
-	rows, err := h.q.GetDailyActivity(r.Context(), int32(days))
+	rows, err := s.q.GetDailyActivity(r.Context(), int32(days))
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
 		return
 	}
-	data := make([]activityRow, len(rows))
+	data := make([]activityJSON, len(rows))
 	for i, d := range rows {
-		data[i] = activityRow{
-			Day:             d.Day.Time.Format("2006-01-02"),
+		data[i] = activityJSON{
+			Day:             d.Day.Format("2006-01-02"),
 			InCount:         d.InCount,
 			OutCount:        d.OutCount,
 			TransferCount:   d.TransferCount,
 			AdjustmentCount: d.AdjustmentCount,
 			ReversalCount:   d.ReversalCount,
-			InValue:         toDecimal(d.InValue),
-			OutValue:        toDecimal(d.OutValue),
+			InValue:         d.InValue,
+			OutValue:        d.OutValue,
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})
 }
 
-type topMoverRow struct {
+type topMoverJSON struct {
 	ProductID       int64           `json:"product_id"`
 	SKU             string          `json:"sku"`
 	Name            string          `json:"name"`
@@ -348,41 +271,42 @@ type topMoverRow struct {
 	ShippedValue    decimal.Decimal `json:"shipped_value"`
 }
 
-// topMovers ranks products by value shipped in the last ?days=30, top ?limit=5.
-func (h *ReportHandler) topMovers(w http.ResponseWriter, r *http.Request) {
+// topMoversReport ranks products by value shipped in the last ?days=30, top ?limit=5.
+func (s *Server) topMoversReport(w http.ResponseWriter, r *http.Request) {
 	fields := map[string]string{}
-	days := intParam(fields, r.URL.Query(), "days", 30, 1, 365)
-	limit := intParam(fields, r.URL.Query(), "limit", 5, 1, 50)
-	if !valid(w, fields) {
+	days := queryInt(fields, r.URL.Query(), "days", 30, 1, 365)
+	limit := queryInt(fields, r.URL.Query(), "limit", 5, 1, 50)
+	if len(fields) > 0 {
+		writeError(w, r, domain.ValidationError(fields))
 		return
 	}
 	now := time.Now().In(ist)
 	since := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, ist).AddDate(0, 0, -(days - 1))
 
-	rows, err := h.q.ListTopMovers(r.Context(), sqlc.ListTopMoversParams{
-		Since:   pgtype.Timestamptz{Time: since, Valid: true},
+	rows, err := s.q.ListTopMovers(r.Context(), sqlc.ListTopMoversParams{
+		Since:   since,
 		MaxRows: int32(limit),
 	})
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
 		return
 	}
-	data := make([]topMoverRow, len(rows))
+	data := make([]topMoverJSON, len(rows))
 	for i, p := range rows {
-		data[i] = topMoverRow{
+		data[i] = topMoverJSON{
 			ProductID:       p.ProductID,
 			SKU:             p.Sku,
 			Name:            p.Name,
 			Unit:            p.Unit,
 			Shipments:       p.Shipments,
-			ShippedQuantity: toDecimal(p.ShippedQuantity),
-			ShippedValue:    toDecimal(p.ShippedValue),
+			ShippedQuantity: p.ShippedQuantity,
+			ShippedValue:    p.ShippedValue,
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data, "since": since})
 }
 
-type forecastRow struct {
+type forecastJSON struct {
 	ProductID      int64           `json:"product_id"`
 	SKU            string          `json:"sku"`
 	Name           string          `json:"name"`
@@ -394,37 +318,38 @@ type forecastRow struct {
 	GapValue       decimal.Decimal `json:"gap_value"`
 }
 
-// seasonForecast compares current stock with what was shipped in the same
+// seasonForecastReport compares current stock with what was shipped in the same
 // ?days=30 window last year, so stock can be bought before the season starts.
-func (h *ReportHandler) seasonForecast(w http.ResponseWriter, r *http.Request) {
+func (s *Server) seasonForecastReport(w http.ResponseWriter, r *http.Request) {
 	fields := map[string]string{}
-	days := intParam(fields, r.URL.Query(), "days", 30, 1, 180)
-	if !valid(w, fields) {
+	days := queryInt(fields, r.URL.Query(), "days", 30, 1, 180)
+	if len(fields) > 0 {
+		writeError(w, r, domain.ValidationError(fields))
 		return
 	}
 	start := time.Now().AddDate(-1, 0, 0)
 	end := start.AddDate(0, 0, days)
 
-	rows, err := h.q.ListSeasonForecast(r.Context(), sqlc.ListSeasonForecastParams{
-		WindowStart: pgtype.Timestamptz{Time: start, Valid: true},
-		WindowEnd:   pgtype.Timestamptz{Time: end, Valid: true},
+	rows, err := s.q.ListSeasonForecast(r.Context(), sqlc.ListSeasonForecastParams{
+		WindowStart: start,
+		WindowEnd:   end,
 	})
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
 		return
 	}
-	data := make([]forecastRow, len(rows))
+	data := make([]forecastJSON, len(rows))
 	for i, p := range rows {
-		data[i] = forecastRow{
+		data[i] = forecastJSON{
 			ProductID:      p.ProductID,
 			SKU:            p.Sku,
 			Name:           p.Name,
 			Unit:           p.Unit,
-			LastYearDemand: toDecimal(p.LastYearDemand),
-			CurrentStock:   toDecimal(p.CurrentStock),
-			Gap:            toDecimal(p.Gap),
-			AverageCost:    toDecimal(p.AverageCost),
-			GapValue:       toDecimal(p.GapValue),
+			LastYearDemand: p.LastYearDemand,
+			CurrentStock:   p.CurrentStock,
+			Gap:            p.Gap,
+			AverageCost:    p.AverageCost,
+			GapValue:       p.GapValue,
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -432,18 +357,4 @@ func (h *ReportHandler) seasonForecast(w http.ResponseWriter, r *http.Request) {
 		"window_end":   end.UTC(),
 		"data":         data,
 	})
-}
-
-// intParam reads an optional whole-number query value within [min, max].
-func intParam(fields map[string]string, query url.Values, name string, def, min, max int) int {
-	raw := query.Get(name)
-	if raw == "" {
-		return def
-	}
-	n, err := strconv.Atoi(raw)
-	if err != nil || n < min || n > max {
-		fields[name] = "must be a whole number from " + strconv.Itoa(min) + " to " + strconv.Itoa(max)
-		return def
-	}
-	return n
 }

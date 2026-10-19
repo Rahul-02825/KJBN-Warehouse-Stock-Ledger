@@ -4,12 +4,12 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/api"
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi"
 )
 
 // Integration test for the read-only inventory endpoints.
 func TestInventoryBalances(t *testing.T) {
-	h := api.NewRouter(testDB(t))
+	h := httpapi.NewRouter(testDB(t))
 
 	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"RICE-25","name":"Rice","unit":"pcs"}`)
 	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"DAL","name":"Dal","unit":"kg"}`)

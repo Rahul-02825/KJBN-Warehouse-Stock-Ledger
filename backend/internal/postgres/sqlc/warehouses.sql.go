@@ -7,8 +7,9 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
 const getDefaultWarehouse = `-- name: GetDefaultWarehouse :one
@@ -79,14 +80,14 @@ type ListBinUsageParams struct {
 }
 
 type ListBinUsageRow struct {
-	ID              int64          `json:"id"`
-	Code            string         `json:"code"`
-	X               float64        `json:"x"`
-	Y               float64        `json:"y"`
-	Capacity        pgtype.Int8    `json:"capacity"`
-	AutoPlace       bool           `json:"auto_place"`
-	Used            pgtype.Numeric `json:"used"`
-	ProductQuantity pgtype.Numeric `json:"product_quantity"`
+	ID              int64           `json:"id"`
+	Code            string          `json:"code"`
+	X               float64         `json:"x"`
+	Y               float64         `json:"y"`
+	Capacity        *int64          `json:"capacity"`
+	AutoPlace       bool            `json:"auto_place"`
+	Used            decimal.Decimal `json:"used"`
+	ProductQuantity decimal.Decimal `json:"product_quantity"`
 }
 
 func (q *Queries) ListBinUsage(ctx context.Context, arg ListBinUsageParams) ([]ListBinUsageRow, error) {
@@ -132,15 +133,15 @@ ORDER BY w.id
 `
 
 type ListWarehousesRow struct {
-	ID        int64              `json:"id"`
-	Code      string             `json:"code"`
-	Name      string             `json:"name"`
-	X         float64            `json:"x"`
-	Y         float64            `json:"y"`
-	RadiusM   float64            `json:"radius_m"`
-	Capacity  pgtype.Int8        `json:"capacity"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	Used      pgtype.Numeric     `json:"used"`
+	ID        int64           `json:"id"`
+	Code      string          `json:"code"`
+	Name      string          `json:"name"`
+	X         float64         `json:"x"`
+	Y         float64         `json:"y"`
+	RadiusM   float64         `json:"radius_m"`
+	Capacity  *int64          `json:"capacity"`
+	CreatedAt time.Time       `json:"created_at"`
+	Used      decimal.Decimal `json:"used"`
 }
 
 func (q *Queries) ListWarehouses(ctx context.Context) ([]ListWarehousesRow, error) {
@@ -209,12 +210,12 @@ RETURNING id, code, name, x, y, radius_m, capacity, created_at
 `
 
 type UpsertWarehouseParams struct {
-	Code     string      `json:"code"`
-	Name     string      `json:"name"`
-	X        float64     `json:"x"`
-	Y        float64     `json:"y"`
-	RadiusM  float64     `json:"radius_m"`
-	Capacity pgtype.Int8 `json:"capacity"`
+	Code     string  `json:"code"`
+	Name     string  `json:"name"`
+	X        float64 `json:"x"`
+	Y        float64 `json:"y"`
+	RadiusM  float64 `json:"radius_m"`
+	Capacity *int64  `json:"capacity"`
 }
 
 func (q *Queries) UpsertWarehouse(ctx context.Context, arg UpsertWarehouseParams) (Warehouse, error) {

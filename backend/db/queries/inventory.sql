@@ -15,8 +15,8 @@ CROSS JOIN locations l
 LEFT JOIN stock_balances sb
     ON sb.product_id = p.id
    AND sb.location_id = l.id
-WHERE p.id = $1
-  AND l.id = $2;
+WHERE p.id = @product_id
+  AND l.id = @location_id;
 
 -- Full grid: every product x every location, zero where no balance row.
 -- name: ListStockOverview :many

@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres"
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
@@ -52,7 +53,7 @@ var warehouse = sqlc.UpsertWarehouseParams{
 	X:        0,
 	Y:        0,
 	RadiusM:  50,
-	Capacity: pgtype.Int8{Int64: 2000, Valid: true},
+	Capacity: binCapacity(2000),
 }
 
 var locations = []location{
@@ -86,7 +87,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	pool, err := pgxpool.New(ctx, url)
+	pool, err := postgres.Connect(ctx, url)
 	if err != nil {
 		log.Fatalf("connect: %v", err)
 	}
@@ -137,7 +138,7 @@ func run(ctx context.Context, pool *pgxpool.Pool) error {
 		row, err := q.GetProductBySKU(ctx, p.sku)
 		if errors.Is(err, pgx.ErrNoRows) {
 			row, err = q.CreateProduct(ctx, sqlc.CreateProductParams{
-				Sku: p.sku, Name: p.name, Unit: p.unit, ReorderLevel: num(p.reorderLevel),
+				Sku: p.sku, Name: p.name, Unit: p.unit, ReorderLevel: decimal.RequireFromString(p.reorderLevel),
 			})
 			fresh[p.sku] = true
 		}
@@ -170,13 +171,15 @@ func run(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-func postOpening(ctx context.Context, q *sqlc.Queries, productID, locationID int64, qty, cost string) error {
+func postOpening(ctx context.Context, q *sqlc.Queries, productID, locationID int64, qtyText, costText string) error {
+	qty := decimal.RequireFromString(qtyText)
+	cost := decimal.RequireFromString(costText)
 	m, err := q.CreateMovement(ctx, sqlc.CreateMovementParams{
 		ProductID:    productID,
 		MovementType: "IN",
-		ToLocationID: pgtype.Int8{Int64: locationID, Valid: true},
-		Quantity:     num(qty),
-		UnitCost:     num(cost),
+		ToLocationID: &locationID,
+		Quantity:     qty,
+		UnitCost:     &cost,
 		Reference:    "Opening balance",
 		CreatedBy:    createdBy,
 	})
@@ -185,7 +188,7 @@ func postOpening(ctx context.Context, q *sqlc.Queries, productID, locationID int
 	}
 	if _, err := q.CreateMovementEntry(ctx, sqlc.CreateMovementEntryParams{
 		MovementID: m.ID, ProductID: productID, LocationID: locationID,
-		QuantityDelta: num(qty), UnitCost: num(cost),
+		QuantityDelta: qty, UnitCost: &cost,
 	}); err != nil {
 		return err
 	}
@@ -193,23 +196,18 @@ func postOpening(ctx context.Context, q *sqlc.Queries, productID, locationID int
 		return err
 	}
 	if _, err := q.IncreaseStockBalance(ctx, sqlc.IncreaseStockBalanceParams{
-		Amount: num(qty), ProductID: productID, LocationID: locationID,
+		Amount: qty, ProductID: productID, LocationID: locationID,
 	}); err != nil {
 		return err
 	}
 	// Every opening receipt for a product uses one cost, so the average equals that cost.
-	_, err = q.UpdateProductAverageCost(ctx, sqlc.UpdateProductAverageCostParams{ID: productID, AverageCost: num(cost)})
+	_, err = q.UpdateProductAverageCost(ctx, sqlc.UpdateProductAverageCostParams{ID: productID, AverageCost: cost})
 	return err
 }
 
-func binCapacity(n int64) pgtype.Int8 {
-	return pgtype.Int8{Int64: n, Valid: n > 0}
-}
-
-func num(s string) pgtype.Numeric {
-	var n pgtype.Numeric
-	if err := n.Scan(s); err != nil {
-		panic(fmt.Sprintf("bad numeric literal %q: %v", s, err))
+func binCapacity(n int64) *int64 {
+	if n <= 0 {
+		return nil
 	}
-	return n
+	return &n
 }

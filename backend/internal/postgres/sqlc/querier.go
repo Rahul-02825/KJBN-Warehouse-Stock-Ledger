@@ -7,13 +7,13 @@ package sqlc
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
 type Querier interface {
 	// Same filters as ListMovementHistory, for the pagination total.
 	CountMovementHistory(ctx context.Context, arg CountMovementHistoryParams) (int64, error)
-	CountProducts(ctx context.Context, search pgtype.Text) (int64, error)
+	CountProducts(ctx context.Context, search *string) (int64, error)
 	CreateLocation(ctx context.Context, arg CreateLocationParams) (Location, error)
 	CreateMovement(ctx context.Context, arg CreateMovementParams) (Movement, error)
 	CreateMovementEntry(ctx context.Context, arg CreateMovementEntryParams) (MovementEntry, error)
@@ -33,11 +33,11 @@ type Querier interface {
 	GetInventoryValuation(ctx context.Context) ([]GetInventoryValuationRow, error)
 	// Ledger-derived total for a product. Used by costing consistency checks so
 	// that the average is never silently computed from a drifted cache.
-	GetLedgerProductTotalQuantity(ctx context.Context, productID int64) (pgtype.Numeric, error)
+	GetLedgerProductTotalQuantity(ctx context.Context, productID int64) (decimal.Decimal, error)
 	GetLocationByCode(ctx context.Context, code string) (Location, error)
 	GetLocationByID(ctx context.Context, id int64) (Location, error)
 	GetMovementByID(ctx context.Context, id int64) (Movement, error)
-	GetMovementByIdempotencyKey(ctx context.Context, idempotencyKey pgtype.Text) (Movement, error)
+	GetMovementByIdempotencyKey(ctx context.Context, idempotencyKey *string) (Movement, error)
 	// Single movement with display names and reversal status.
 	GetMovementDetail(ctx context.Context, id int64) (GetMovementDetailRow, error)
 	GetProductByID(ctx context.Context, id int64) (Product, error)
@@ -48,8 +48,8 @@ type Querier interface {
 	// transfer's two entries stay adjacent and deterministic.
 	GetProductLedger(ctx context.Context, productID int64) ([]GetProductLedgerRow, error)
 	// Total on hand for a product across all locations (cached).
-	GetProductTotalQuantity(ctx context.Context, productID int64) (pgtype.Numeric, error)
-	GetReversalForMovement(ctx context.Context, reversalOfID pgtype.Int8) (Movement, error)
+	GetProductTotalQuantity(ctx context.Context, productID int64) (decimal.Decimal, error)
+	GetReversalForMovement(ctx context.Context, reversalOfID *int64) (Movement, error)
 	// Balance for one (product, location) cell. Returns a zero row when no
 	// stock_balances row exists yet, as long as both product and location exist.
 	GetStockBalance(ctx context.Context, arg GetStockBalanceParams) (GetStockBalanceRow, error)
