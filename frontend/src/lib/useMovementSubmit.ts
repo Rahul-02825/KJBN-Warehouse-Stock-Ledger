@@ -14,12 +14,14 @@ export function useMovementSubmit(path: string) {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [serverError, setServerError] = useState<ApiError | null>(null)
   const [saving, setSaving] = useState(false)
+  const [lastError, setLastError] = useState<ApiError | null>(null)
   // One key per intended posting: a double click or retry cannot post twice.
   const key = useRef(newKey())
 
   async function submit(body: Record<string, unknown>, clientErrors: Record<string, string>, unit = ''): Promise<Movement | null> {
     setErrors(clientErrors)
     setServerError(null)
+    setLastError(null)
     if (Object.keys(clientErrors).length > 0) return null
 
     setSaving(true)
@@ -30,6 +32,7 @@ export function useMovementSubmit(path: string) {
       return movement
     } catch (err) {
       const e = err as ApiError
+      setLastError(e)
       if (e.code === 'VALIDATION_ERROR') setErrors(e.fields)
       else if (e.code === 'INSUFFICIENT_STOCK') {
         const u = unit ? ` ${unit}` : ''
@@ -41,5 +44,5 @@ export function useMovementSubmit(path: string) {
     }
   }
 
-  return { submit, errors, serverError, saving }
+  return { submit, errors, serverError, saving, lastError }
 }
