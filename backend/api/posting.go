@@ -388,22 +388,11 @@ func lockProduct(ctx context.Context, q *sqlc.Queries, productID int64, qty deci
 }
 
 func receiptChanges(ctx context.Context, q *sqlc.Queries, product sqlc.Product, req InRequest) (int64, []change, error) {
-	if product.Unit != "pcs" {
-		if req.LocationID == 0 {
-			return 0, nil, validationError{"location_id": "is required for kg and litre products"}
-		}
-		location, err := getLocation(ctx, q, req.LocationID)
-		if err != nil {
-			return 0, nil, err
-		}
-		return location.ID, []change{{location.ID, req.Quantity}}, nil
-	}
-
 	warehouse, err := resolveWarehouse(ctx, q, req.LocationID, req.WarehouseID, true)
 	if err != nil {
 		return 0, nil, err
 	}
-	plan, err := planReceipt(ctx, q, warehouse, product.ID, req.Quantity.IntPart(), req.LocationID)
+	plan, err := planReceipt(ctx, q, warehouse, product, req.Quantity, req.LocationID)
 	if err != nil {
 		return 0, nil, err
 	}

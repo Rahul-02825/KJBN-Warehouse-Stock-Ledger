@@ -178,13 +178,29 @@ func TestCapacity_OtherMovementsIntoFullBin(t *testing.T) {
 	}
 }
 
-func TestCapacity_KgProductsAreNotCounted(t *testing.T) {
+func receiveKg(location string, qty string) string {
+	return fmt.Sprintf(`{"product_id":3,"location_id":%s,"quantity":"%s","unit_cost":"10","created_by":"t"}`, location, qty)
+}
+
+func TestCapacity_KgSplitsAcrossBinsInFractions(t *testing.T) {
 	h, _ := setupLayout(t)
-	if status, _ := send(t, h, "POST", "/api/movements/in", receiveInto(3, "", 5)); status != 400 {
-		t.Errorf("kg receipt without a bin: %d, want 400", status)
+	m := mustSend(t, h, 201, "POST", "/api/movements/in", receiveKg("1", "70.25"))
+	if got := entriesByBin(t, h, m["id"]); got[1] != "60" || got[2] != "10.25" || len(got) != 2 {
+		t.Fatalf("entries = %v, want A-01 60 and A-02 10.25", got)
 	}
-	mustSend(t, h, 201, "POST", "/api/movements/in", receiveInto(1, "1", 60))
-	mustSend(t, h, 201, "POST", "/api/movements/in", receiveInto(3, "1", 500))
+	m = mustSend(t, h, 201, "POST", "/api/movements/in", `{"product_id":3,"quantity":"5","unit_cost":"10","created_by":"t"}`)
+	if m["to_location_id"] != float64(2) {
+		t.Errorf("kg without a bin should start where the most dal is with space (A-02), got %v", m["to_location_id"])
+	}
+}
+
+func TestCapacity_KgCountsAndPiecesStayWhole(t *testing.T) {
+	h, _ := setupLayout(t)
+	mustSend(t, h, 201, "POST", "/api/movements/in", receiveKg("1", "50.5"))
+	m := mustSend(t, h, 201, "POST", "/api/movements/in", receiveInto(1, "1", 10))
+	if got := entriesByBin(t, h, m["id"]); got[1] != "9" || got[2] != "1" {
+		t.Fatalf("entries = %v, want 9 whole pieces in A-01 (9.5 units free) and 1 in A-02", got)
+	}
 }
 
 func TestReceive_ConcurrentReceiptsNeverOverfillABin(t *testing.T) {
@@ -214,7 +230,7 @@ func TestReceive_ConcurrentReceiptsNeverOverfillABin(t *testing.T) {
 		t.Fatalf("codes = %v, want 10 accepted and 10 rejected", codes)
 	}
 	locations := mustSend(t, h, 200, "GET", "/api/locations", "")
-	if used := locations["data"].([]any)[0].(map[string]any)["used"]; used != float64(10) {
+	if used := locations["data"].([]any)[0].(map[string]any)["used"]; used != "10" {
 		t.Errorf("used = %v, want exactly the capacity of 10", used)
 	}
 }
@@ -230,7 +246,7 @@ func TestPreview_ShowsPlanWithoutPosting(t *testing.T) {
 	}
 	allocations := body["allocations"].([]any)
 	second := allocations[1].(map[string]any)
-	if len(allocations) != 2 || second["location_code"] != "A-02" || second["quantity"] != float64(15) || second["distance_m"] != float64(6) {
+	if len(allocations) != 2 || second["location_code"] != "A-02" || second["quantity"] != "15" || second["distance_m"] != float64(6) {
 		t.Errorf("allocations = %v", allocations)
 	}
 	if countMovements(t, pool) != before {
@@ -240,14 +256,18 @@ func TestPreview_ShowsPlanWithoutPosting(t *testing.T) {
 	if status, body := send(t, h, "POST", "/api/placements/preview", `{"product_id":1,"quantity":"1000"}`); status != 409 || errorCode(body) != "NO_SPACE" {
 		t.Errorf("too much: %d %v", status, body)
 	}
-	if status, _ := send(t, h, "POST", "/api/placements/preview", `{"product_id":3,"quantity":"5"}`); status != 400 {
-		t.Errorf("kg product preview: %d, want 400", status)
+	kg := mustSend(t, h, 200, "POST", "/api/placements/preview", `{"product_id":3,"quantity":"2.5"}`)
+	if kg["unit"] != "kg" || kg["allocations"].([]any)[0].(map[string]any)["quantity"] != "2.5" {
+		t.Errorf("kg preview = %v", kg)
+	}
+	if status, _ := send(t, h, "POST", "/api/placements/preview", `{"product_id":1,"quantity":"1.5"}`); status != 400 {
+		t.Errorf("fractional pcs preview: %d, want 400", status)
 	}
 }
 
 func TestPreview_RejectsBadInput(t *testing.T) {
 	h := routerWithoutDB()
-	for _, body := range []string{`{}`, `{"product_id":1,"quantity":"1.5"}`, `{"product_id":1,"quantity":"2","location_id":-1}`} {
+	for _, body := range []string{`{}`, `{"product_id":1,"quantity":"0"}`, `{"product_id":1,"quantity":"2","location_id":-1}`} {
 		if status, resp := send(t, h, "POST", "/api/placements/preview", body); status != 400 {
 			t.Errorf("%s: %d %v, want 400", body, status, resp)
 		}

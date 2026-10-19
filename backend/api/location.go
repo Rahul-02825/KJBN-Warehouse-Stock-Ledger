@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
@@ -37,16 +38,16 @@ type createLocationRequest struct {
 }
 
 type locationResponse struct {
-	ID          int64     `json:"id"`
-	Code        string    `json:"code"`
-	Description string    `json:"description"`
-	WarehouseID int64     `json:"warehouse_id"`
-	X           float64   `json:"x"`
-	Y           float64   `json:"y"`
-	Capacity    *int64    `json:"capacity"`
-	AutoPlace   bool      `json:"auto_place"`
-	Used        *int64    `json:"used,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          int64            `json:"id"`
+	Code        string           `json:"code"`
+	Description string           `json:"description"`
+	WarehouseID int64            `json:"warehouse_id"`
+	X           float64          `json:"x"`
+	Y           float64          `json:"y"`
+	Capacity    *int64           `json:"capacity"`
+	AutoPlace   bool             `json:"auto_place"`
+	Used        *decimal.Decimal `json:"used,omitempty"`
+	CreatedAt   time.Time        `json:"created_at"`
 }
 
 func toLocationResponse(l sqlc.Location) locationResponse {
@@ -140,7 +141,8 @@ func (h *LocationHandler) list(w http.ResponseWriter, r *http.Request) {
 			ID: row.ID, Code: row.Code, Description: row.Description, CreatedAt: row.CreatedAt,
 			WarehouseID: row.WarehouseID, X: row.X, Y: row.Y, Capacity: row.Capacity, AutoPlace: row.AutoPlace,
 		})
-		data[i].Used = &row.Used
+		used := toDecimal(row.Used)
+		data[i].Used = &used
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})
 }

@@ -28,7 +28,7 @@ export function Locations() {
       <PageHeader
         eyebrow="Catalogue"
         title="Bins"
-        description="Where stock is kept. Capacity counts pieces; receipts that overflow a bin go to the nearest bins with space."
+        description="Where stock is kept. Every piece, kilogram or litre takes one unit of space; receipts that overflow a bin go to the nearest bins with space."
         actions={
           !creating &&
           warehouse && (
@@ -49,7 +49,7 @@ export function Locations() {
         <div className="mb-10 grid gap-6 sm:grid-cols-3">
           <Stat label="Warehouse" value={warehouse.name} />
           <Stat label="Perimeter" value={`${warehouse.radius_m} m`} />
-          <Stat label="Pieces stored" value={fillText(warehouse.used, warehouse.capacity)} />
+          <Stat label="Units stored" value={fillText(warehouse.used, warehouse.capacity)} />
         </div>
       )}
       {message && <SuccessAlert>{message}</SuccessAlert>}
@@ -79,7 +79,7 @@ export function Locations() {
               </Td>
               <Td numeric>{distanceFromCentre(warehouse, l.x, l.y).toFixed(1)} m</Td>
               <Td>
-                <FillBar used={l.used ?? 0} capacity={l.capacity} />
+                <FillBar used={l.used ?? '0'} capacity={l.capacity} />
               </Td>
               <Td>{l.auto_place ? <span className="text-muted">Automatic</span> : <Badge tone="neutral">Manual only</Badge>}</Td>
             </Row>
@@ -90,7 +90,7 @@ export function Locations() {
   )
 }
 
-function FillBar({ used, capacity }: { used: number; capacity: number | null }) {
+function FillBar({ used, capacity }: { used: string; capacity: number | null }) {
   const percent = fillPercent(used, capacity)
   const color = percent >= 100 ? 'bg-danger' : percent >= 80 ? 'bg-saffron' : 'bg-petrol'
   return (

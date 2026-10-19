@@ -394,7 +394,7 @@ func writePostingError(w http.ResponseWriter, r *http.Request, err error) {
 		writeJSON(w, http.StatusConflict, map[string]errorBody{"error": {
 			Code:    "NO_SPACE",
 			Message: ns.Error(),
-			Details: map[string]string{"fit": strconv.FormatInt(ns.fit, 10), "requested": strconv.FormatInt(ns.requested, 10)},
+			Details: map[string]string{"fit": fromUnits(ns.fit).String(), "requested": fromUnits(ns.requested).String()},
 		}})
 	case isNumericOverflow(err):
 		writeError(w, http.StatusBadRequest, "OUT_OF_RANGE", "a resulting quantity or value is too large")

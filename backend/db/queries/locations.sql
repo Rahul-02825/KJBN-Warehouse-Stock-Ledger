@@ -21,10 +21,9 @@ WHERE code = $1;
 -- name: ListLocations :many
 SELECT
     l.*,
-    COALESCE(SUM(sb.quantity) FILTER (WHERE p.unit = 'pcs'), 0)::BIGINT AS used
+    COALESCE(SUM(sb.quantity), 0)::NUMERIC(18, 4) AS used
 FROM locations l
 LEFT JOIN stock_balances sb ON sb.location_id = l.id
-LEFT JOIN products p ON p.id = sb.product_id
 GROUP BY l.id
 ORDER BY l.code;
 

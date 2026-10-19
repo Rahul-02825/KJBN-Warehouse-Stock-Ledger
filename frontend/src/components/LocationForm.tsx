@@ -86,7 +86,7 @@ export function LocationForm({ warehouse, onSaved, onCancel }: { warehouse: Ware
         <Field label="Position y (m)">
           <Input value={y} onChange={(e) => setY(e.target.value)} inputMode="decimal" invalid={!!errors.x} />
         </Field>
-        <Field label="Capacity (pieces)" error={errors.capacity} hint="Leave empty for no limit">
+        <Field label="Capacity (units)" error={errors.capacity} hint="1 unit = 1 piece, kg or litre. Empty for no limit">
           <Input value={capacity} onChange={(e) => setCapacity(e.target.value)} inputMode="numeric" invalid={!!errors.capacity} />
         </Field>
         <div className="self-center">
