@@ -205,26 +205,31 @@ func (l *Ledger) PostAdjustment(ctx context.Context, req AdjustmentRequest) (m s
 		if err != nil {
 			return err
 		}
-		row := sqlc.CreateMovementParams{
-			ProductID:      product.ID,
-			MovementType:   "ADJUSTMENT",
-			Quantity:       toNumeric(req.Quantity.Abs()),
-			UnitCost:       product.AverageCost,
-			Reason:         pgtype.Text{String: req.Reason, Valid: true},
-			Note:           req.Note,
-			Reference:      req.Reference,
-			CreatedBy:      req.CreatedBy,
-			IdempotencyKey: optText(req.IdempotencyKey),
-		}
-		if req.Quantity.IsPositive() {
-			row.ToLocationID = optID(location.ID)
-		} else {
-			row.FromLocationID = optID(location.ID)
-		}
+		row := adjustmentRow(product, location.ID, req.Quantity, req.Reason, req.Note, req.Reference, req.CreatedBy)
+		row.IdempotencyKey = optText(req.IdempotencyKey)
 		m, err = applyChanges(ctx, q, product, row, []change{{location.ID, req.Quantity}})
 		return err
 	})
 	return m, err
+}
+
+func adjustmentRow(product sqlc.Product, locationID int64, signed decimal.Decimal, reason, note, reference, createdBy string) sqlc.CreateMovementParams {
+	row := sqlc.CreateMovementParams{
+		ProductID:    product.ID,
+		MovementType: "ADJUSTMENT",
+		Quantity:     toNumeric(signed.Abs()),
+		UnitCost:     product.AverageCost,
+		Reason:       pgtype.Text{String: reason, Valid: true},
+		Note:         note,
+		Reference:    reference,
+		CreatedBy:    createdBy,
+	}
+	if signed.IsPositive() {
+		row.ToLocationID = optID(locationID)
+	} else {
+		row.FromLocationID = optID(locationID)
+	}
+	return row
 }
 
 // PostReversal undoes a movement by applying its entries with the signs flipped.
