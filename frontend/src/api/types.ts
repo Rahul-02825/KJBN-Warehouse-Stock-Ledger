@@ -56,7 +56,32 @@ export interface Location {
   id: number
   code: string
   description: string
+  warehouse_id: number
+  x: number
+  y: number
+  capacity: number | null
+  auto_place: boolean
+  used?: number
   created_at: string
+}
+
+export interface Warehouse {
+  id: number
+  code: string
+  name: string
+  x: number
+  y: number
+  radius_m: number
+  capacity: number | null
+  used: number
+}
+
+export interface PlacementPreview {
+  warehouse_id: number
+  start_location_id: number
+  start_location_code: string
+  reason: string
+  allocations: { location_id: number; location_code: string; quantity: number; distance_m: number }[]
 }
 
 // One cell of the stock grid: a product in a bin.
