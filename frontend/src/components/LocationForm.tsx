@@ -3,7 +3,7 @@ import { ApiError, api } from '../api/client'
 import type { Location, Warehouse } from '../api/types'
 import { distanceFromCentre } from '../lib/layout'
 import { checkText, onlyErrors } from '../lib/validate'
-import { Button, Card, ErrorAlert, Field, Input } from './ui'
+import { Button, Checkbox, ErrorAlert, Field, Input, Panel } from './ui'
 
 const coordinatePattern = /^-?\d+(\.\d+)?$/
 
@@ -69,11 +69,11 @@ export function LocationForm({ warehouse, onSaved, onCancel }: { warehouse: Ware
   }
 
   return (
-    <Card title="New bin" className="mb-6">
+    <Panel title="New bin" className="mb-10">
       <ErrorAlert error={serverError} />
-      <form onSubmit={submit} noValidate className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Code" error={errors.code} hint="Unique, no spaces, e.g. A-01">
-          <Input value={code} onChange={(e) => setCode(e.target.value)} invalid={!!errors.code} autoFocus />
+      <form onSubmit={submit} noValidate className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <Field label="Code" error={errors.code} hint="Unique, without spaces, such as A-01">
+          <Input value={code} onChange={(e) => setCode(e.target.value)} invalid={!!errors.code} autoFocus className="font-mono" />
         </Field>
         <div className="sm:col-span-1 lg:col-span-3">
           <Field label="Description" error={errors.description} hint="Optional">
@@ -86,22 +86,21 @@ export function LocationForm({ warehouse, onSaved, onCancel }: { warehouse: Ware
         <Field label="Position y (m)">
           <Input value={y} onChange={(e) => setY(e.target.value)} inputMode="decimal" invalid={!!errors.x} />
         </Field>
-        <Field label="Capacity (pcs)" error={errors.capacity} hint="Empty means no limit">
+        <Field label="Capacity (pieces)" error={errors.capacity} hint="Leave empty for no limit">
           <Input value={capacity} onChange={(e) => setCapacity(e.target.value)} inputMode="numeric" invalid={!!errors.capacity} />
         </Field>
-        <label className="flex items-center gap-2 self-center text-sm text-slate-700">
-          <input type="checkbox" checked={autoPlace} onChange={(e) => setAutoPlace(e.target.checked)} className="h-4 w-4 accent-emerald-700" />
-          Use for automatic placement
-        </label>
+        <div className="self-center">
+          <Checkbox label="Use for automatic placement" checked={autoPlace} onChange={(e) => setAutoPlace(e.target.checked)} />
+        </div>
         <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
           <Button type="submit" disabled={saving}>
-            {saving ? 'Saving…' : 'Create bin'}
+            {saving ? 'Saving…' : 'Add bin'}
           </Button>
-          <Button type="button" variant="secondary" onClick={onCancel}>
+          <Button type="button" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
         </div>
       </form>
-    </Card>
+    </Panel>
   )
 }

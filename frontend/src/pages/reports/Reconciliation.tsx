@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import type { ReconciliationResponse } from '../../api/types'
-import { Table, Td } from '../../components/Table'
-import { Button, EmptyState, ErrorAlert, PageHeader, Spinner, StatCard } from '../../components/ui'
+import { Row, Table, Td } from '../../components/Table'
+import { Button, Checkbox, EmptyState, ErrorAlert, Spinner, Stat } from '../../components/ui'
 import { formatDecimal } from '../../lib/format'
 import { isZero } from '../../lib/grid'
 import { useApi } from '../../lib/useApi'
+import { ReportHeader } from './ReportHeader'
 
 export function Reconciliation() {
   const [onlyDrift, setOnlyDrift] = useState(true)
@@ -13,12 +14,12 @@ export function Reconciliation() {
 
   return (
     <>
-      <PageHeader
+      <ReportHeader
         title="Reconciliation"
-        description="Recomputes every balance from the ledger and compares it with the cached balance. It only reports; it never changes data."
+        description="Recounts every bin from the ledger and compares it with the stored balance. It only reports; it never changes anything."
         actions={
-          <Button onClick={reload} disabled={loading}>
-            {loading ? 'Running…' : 'Run again'}
+          <Button variant="ghost" onClick={reload} disabled={loading}>
+            {loading ? 'Recounting…' : 'Recount now'}
           </Button>
         }
       />
@@ -27,43 +28,42 @@ export function Reconciliation() {
         !error && <Spinner />
       ) : (
         <>
-          <div className="mb-4 flex flex-wrap items-center gap-4">
+          <div className="mb-8 flex flex-wrap items-end gap-8">
             <div className="w-56">
-              <StatCard label="Balances with drift" value={data.drift_count} tone={data.drift_count ? 'danger' : 'default'} />
+              <Stat label="Bins out of balance" value={data.drift_count} tone={data.drift_count ? 'danger' : 'success'} />
             </div>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={onlyDrift} onChange={(e) => setOnlyDrift(e.target.checked)} className="h-4 w-4 accent-emerald-700" />
-              Show only differences
-            </label>
+            <Checkbox label="Show only differences" checked={onlyDrift} onChange={(e) => setOnlyDrift(e.target.checked)} />
           </div>
           {data.data.length === 0 ? (
-            <EmptyState title="Ledger and balances agree">Every cached balance equals the sum of its ledger entries.</EmptyState>
+            <EmptyState title="Ledger and balances agree">Every stored balance equals the sum of its ledger entries.</EmptyState>
           ) : (
-            <Table head={['SKU', 'Bin', 'Cached', 'Ledger', 'Difference']} numeric={[2, 3, 4]}>
+            <Table head={['SKU', 'Bin', 'Stored', 'From ledger', 'Difference']} numeric={[2, 3, 4]}>
               {data.data.map((r) => {
                 const drift = !isZero(r.difference.replace('-', ''))
                 return (
-                  <tr key={`${r.product_id}-${r.location_id}`} className={drift ? 'bg-red-50' : ''}>
+                  <Row key={`${r.product_id}-${r.location_id}`} tone={drift ? 'danger' : 'default'}>
                     <Td>
-                      <Link to={`/products/${r.product_id}`} className="font-mono text-emerald-700 hover:underline">
+                      <Link to={`/products/${r.product_id}`} className="link-quiet code">
                         {r.sku}
                       </Link>
                     </Td>
-                    <Td className="font-mono">{r.location_code}</Td>
-                    <Td className="text-right tabular-nums">{formatDecimal(r.cached_quantity)}</Td>
-                    <Td className="text-right tabular-nums">{formatDecimal(r.ledger_quantity)}</Td>
-                    <Td className={`text-right font-semibold tabular-nums ${drift ? 'text-red-700' : 'text-slate-400'}`}>{formatDecimal(r.difference)}</Td>
-                  </tr>
+                    <Td className="code">{r.location_code}</Td>
+                    <Td numeric>{formatDecimal(r.cached_quantity)}</Td>
+                    <Td numeric>{formatDecimal(r.ledger_quantity)}</Td>
+                    <Td numeric className={drift ? 'font-medium text-danger' : 'text-muted'}>
+                      {formatDecimal(r.difference)}
+                    </Td>
+                  </Row>
                 )
               })}
             </Table>
           )}
-          <p className="mt-4 text-sm text-slate-500">
-            Matching quantities do not prove the average cost is right. Use the{' '}
-            <Link to="/reports/cost-check" className="text-emerald-700 underline">
+          <p className="mt-6 max-w-2xl text-sm text-muted">
+            Matching quantities do not prove the average cost is right. The{' '}
+            <Link to="/reports/cost-check" className="link">
               cost check
             </Link>{' '}
-            for that.
+            covers that.
           </p>
         </>
       )}

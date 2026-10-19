@@ -1,20 +1,21 @@
 import { Link } from 'react-router'
 import type { CostCheckRow } from '../../api/types'
-import { Table, Td } from '../../components/Table'
-import { Button, ErrorAlert, PageHeader, Spinner, StatCard } from '../../components/ui'
+import { Row, Table, Td } from '../../components/Table'
+import { Badge, Button, ErrorAlert, Spinner, Stat } from '../../components/ui'
 import { formatMoney } from '../../lib/format'
 import { useApi } from '../../lib/useApi'
+import { ReportHeader } from './ReportHeader'
 
 export function CostCheck() {
   const { data, error, loading, reload } = useApi<{ data: CostCheckRow[]; mismatch_count: number }>('/api/reports/cost-check')
   return (
     <>
-      <PageHeader
+      <ReportHeader
         title="Cost check"
-        description="Replays every movement with the same costing rules used when posting and compares the result with each product's stored average cost."
+        description="Replays every movement with the posting rules and compares the result with each product's stored average cost."
         actions={
-          <Button onClick={reload} disabled={loading}>
-            {loading ? 'Running…' : 'Run again'}
+          <Button variant="ghost" onClick={reload} disabled={loading}>
+            {loading ? 'Checking…' : 'Check again'}
           </Button>
         }
       />
@@ -23,23 +24,25 @@ export function CostCheck() {
         !error && <Spinner />
       ) : (
         <>
-          <div className="mb-4 w-56">
-            <StatCard label="Products that differ" value={data.mismatch_count} tone={data.mismatch_count ? 'danger' : 'default'} />
+          <div className="mb-8 w-56">
+            <Stat label="Products that differ" value={data.mismatch_count} tone={data.mismatch_count ? 'danger' : 'success'} />
           </div>
-          <Table head={['SKU', 'Name', 'Stored average', 'Recomputed', 'Difference', 'Status']} numeric={[2, 3, 4]}>
+          <Table head={['SKU', 'Name', 'Stored average', 'From history', 'Difference', '']} numeric={[2, 3, 4]}>
             {data.data.map((r) => (
-              <tr key={r.product_id} className={r.matches ? '' : 'bg-red-50'}>
+              <Row key={r.product_id} tone={r.matches ? 'default' : 'danger'}>
                 <Td>
-                  <Link to={`/products/${r.product_id}`} className="font-mono text-emerald-700 hover:underline">
+                  <Link to={`/products/${r.product_id}`} className="link-quiet code">
                     {r.sku}
                   </Link>
                 </Td>
                 <Td>{r.name}</Td>
-                <Td className="text-right tabular-nums">{formatMoney(r.stored_average)}</Td>
-                <Td className="text-right tabular-nums">{formatMoney(r.recomputed_average)}</Td>
-                <Td className="text-right tabular-nums">{formatMoney(r.difference)}</Td>
-                <Td>{r.matches ? <span className="text-emerald-700">Matches</span> : <span className="font-semibold text-red-700">Differs</span>}</Td>
-              </tr>
+                <Td numeric>{formatMoney(r.stored_average)}</Td>
+                <Td numeric>{formatMoney(r.recomputed_average)}</Td>
+                <Td numeric className={r.matches ? 'text-muted' : 'font-medium text-danger'}>
+                  {formatMoney(r.difference)}
+                </Td>
+                <Td>{r.matches ? <Badge tone="success">Matches</Badge> : <Badge tone="danger">Differs</Badge>}</Td>
+              </Row>
             ))}
           </Table>
         </>

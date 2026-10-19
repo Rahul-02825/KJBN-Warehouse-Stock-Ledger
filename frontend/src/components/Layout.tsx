@@ -1,79 +1,92 @@
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router'
-import { HealthBadge } from './HealthBadge'
+import { Link, NavLink, Outlet, useLocation } from 'react-router'
+import { ButtonLink } from './ui'
 
-// Nav entries are added here as each page is built.
-const navGroups = [
-  { title: 'Overview', links: [{ to: '/', label: 'Dashboard' }] },
-  {
-    title: 'Setup',
-    links: [
-      { to: '/products', label: 'Products' },
-      { to: '/locations', label: 'Locations' },
-    ],
-  },
-  {
-    title: 'Stock',
-    links: [
-      { to: '/stock', label: 'Stock overview' },
-      { to: '/receive', label: 'Receive' },
-      { to: '/ship', label: 'Ship' },
-      { to: '/transfer', label: 'Transfer' },
-      { to: '/adjust', label: 'Adjust' },
-    ],
-  },
-  { title: 'History', links: [{ to: '/movements', label: 'Movements' }] },
-  {
-    title: 'Reports',
-    links: [
-      { to: '/reports/low-stock', label: 'Low stock' },
-      { to: '/reports/valuation', label: 'Valuation' },
-      { to: '/reports/reconciliation', label: 'Reconciliation' },
-      { to: '/reports/cost-check', label: 'Cost check' },
-      { to: '/reports/season-forecast', label: 'Season forecast' },
-    ],
-  },
+const destinations = [
+  { to: '/', label: 'Overview', match: (path: string) => path === '/' },
+  { to: '/stock', label: 'Stock', match: (path: string) => path.startsWith('/stock') },
+  { to: '/movements', label: 'Movements', match: (path: string) => path.startsWith('/movements') },
+  { to: '/products', label: 'Catalogue', match: (path: string) => path.startsWith('/products') || path.startsWith('/locations') },
+  { to: '/reports/low-stock', label: 'Reports', match: (path: string) => path.startsWith('/reports') },
 ]
 
 export function Layout() {
+  const { pathname } = useLocation()
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="min-h-screen md:flex">
-      <aside className="bg-slate-900 text-slate-100 md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:overflow-y-auto">
-        <div className="flex items-center justify-between px-4 py-4">
-          <div>
-            <p className="font-semibold">Stock Ledger</p>
-            <HealthBadge />
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-30 border-b border-line bg-[color-mix(in_srgb,var(--color-paper)_80%,transparent)] backdrop-blur-[10px]">
+        <div className="mx-auto flex h-[62px] max-w-[1100px] items-center gap-8 px-4 sm:px-8">
+          <div className="flex items-center gap-8">
+            <Link
+              to="/"
+              onClick={() => setOpen(false)}
+              className="whitespace-nowrap border border-saffron px-2.5 py-1.5 text-[17px] font-light uppercase leading-none tracking-[0.08em] text-petrol"
+            >
+              Stock Ledger
+            </Link>
+            <span className="hidden h-6 w-px bg-line md:block" aria-hidden />
           </div>
-          <button className="rounded border border-slate-700 px-2 py-1 text-sm md:hidden" onClick={() => setOpen(!open)} aria-expanded={open}>
-            Menu
-          </button>
-        </div>
-        <nav className={`${open ? 'block' : 'hidden'} px-2 pb-4 md:block`}>
-          {navGroups.map((group) => (
-            <div key={group.title} className="mb-4">
-              <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{group.title}</p>
-              {group.links.map((link) => (
-                <NavLink
-                  key={link.to}
-                  to={link.to}
-                  end={link.to === '/'}
-                  onClick={() => setOpen(false)}
-                  className={({ isActive }) =>
-                    `block rounded px-2 py-1.5 text-sm ${isActive ? 'bg-emerald-700 text-white' : 'text-slate-300 hover:bg-slate-800'}`
-                  }
-                >
-                  {link.label}
-                </NavLink>
-              ))}
+
+          <nav className="hidden flex-1 items-center gap-6 md:flex" aria-label="Main">
+            {destinations.map((d) => (
+              <NavItem key={d.to} to={d.to} label={d.label} active={d.match(pathname)} />
+            ))}
+          </nav>
+
+          <div className="ml-auto flex items-center gap-4">
+            <div className="hidden sm:block">
+              <ButtonLink to="/record/receive" className="px-4 py-2">
+                Record movement
+              </ButtonLink>
             </div>
-          ))}
-        </nav>
-      </aside>
-      <main className="min-w-0 flex-1 p-4 md:p-8">
+            <button
+              className="rounded-btn border border-line px-3 py-1.5 text-sm md:hidden"
+              onClick={() => setOpen(!open)}
+              aria-expanded={open}
+              aria-controls="mobile-nav"
+            >
+              Menu
+            </button>
+          </div>
+        </div>
+
+        {open && (
+          <nav id="mobile-nav" className="border-t border-line px-4 pb-4 pt-2 md:hidden" aria-label="Main">
+            {destinations.map((d) => (
+              <Link
+                key={d.to}
+                to={d.to}
+                onClick={() => setOpen(false)}
+                className={`block border-b border-line py-3 text-[13px] uppercase tracking-[0.14em] ${d.match(pathname) ? 'font-medium text-ink' : 'text-muted'}`}
+              >
+                {d.label}
+              </Link>
+            ))}
+            <ButtonLink to="/record/receive" className="mt-4 w-full" onClick={() => setOpen(false)}>
+              Record movement
+            </ButtonLink>
+          </nav>
+        )}
+      </header>
+
+      <main className="mx-auto max-w-[1100px] animate-reveal px-4 pb-24 pt-10 sm:px-8 sm:pt-14">
         <Outlet />
       </main>
     </div>
+  )
+}
+
+function NavItem({ to, label, active }: { to: string; label: string; active: boolean }) {
+  return (
+    <NavLink
+      to={to}
+      className={`relative py-1 text-[12.5px] uppercase tracking-[0.14em] transition-colors duration-200 ${active ? 'text-ink' : 'text-muted hover:text-ink'}`}
+      aria-current={active ? 'page' : undefined}
+    >
+      {label}
+      {active && <span className="absolute inset-x-0 -bottom-[19px] h-0.5 bg-saffron" aria-hidden />}
+    </NavLink>
   )
 }

@@ -2,9 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { ApiError, api } from '../api/client'
 import { UNITS, type Product } from '../api/types'
 import { checkDecimal, checkText, onlyErrors } from '../lib/validate'
-import { Button, Card, ErrorAlert, Field, Input, Select } from './ui'
+import { Button, ErrorAlert, Field, Input, Panel, Select } from './ui'
 
-// Creates a product, or edits one when `product` is given. SKU and unit cannot change after creation.
 export function ProductForm({ product, onSaved, onCancel }: { product?: Product; onSaved: (p: Product) => void; onCancel: () => void }) {
   const editing = product !== undefined
   const [sku, setSku] = useState(product?.sku ?? '')
@@ -43,16 +42,16 @@ export function ProductForm({ product, onSaved, onCancel }: { product?: Product;
   }
 
   return (
-    <Card title={editing ? `Edit ${product.sku}` : 'New product'} className="mb-6">
+    <Panel title={editing ? `Edit ${product.sku}` : 'New product'} className="mb-10">
       <ErrorAlert error={serverError} />
-      <form onSubmit={submit} noValidate className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="SKU" error={errors.sku} hint={editing ? 'Cannot be changed' : 'Unique code, e.g. SPRAYER-16L'}>
-          <Input value={sku} onChange={(e) => setSku(e.target.value)} disabled={editing} invalid={!!errors.sku} autoFocus={!editing} />
+      <form onSubmit={submit} noValidate className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <Field label="SKU" error={errors.sku} hint={editing ? 'Fixed once created' : 'A unique code, such as SPRAYER-16L'}>
+          <Input value={sku} onChange={(e) => setSku(e.target.value)} disabled={editing} invalid={!!errors.sku} autoFocus={!editing} className="font-mono" />
         </Field>
         <Field label="Name" error={errors.name}>
           <Input value={name} onChange={(e) => setName(e.target.value)} invalid={!!errors.name} autoFocus={editing} />
         </Field>
-        <Field label="Unit" error={errors.unit} hint={editing ? 'Cannot be changed' : 'pcs must be whole numbers'}>
+        <Field label="Unit" error={errors.unit} hint={editing ? 'Fixed once created' : 'Pieces are counted in whole numbers'}>
           <Select value={unit} onChange={(e) => setUnit(e.target.value)} disabled={editing} invalid={!!errors.unit}>
             {UNITS.map((u) => (
               <option key={u} value={u}>
@@ -61,18 +60,18 @@ export function ProductForm({ product, onSaved, onCancel }: { product?: Product;
             ))}
           </Select>
         </Field>
-        <Field label="Reorder level" error={errors.reorder_level} hint="Low-stock alert at or below this total">
+        <Field label="Reorder level" error={errors.reorder_level} hint="Flagged as low at or below this total">
           <Input value={reorderLevel} onChange={(e) => setReorderLevel(e.target.value)} inputMode="decimal" invalid={!!errors.reorder_level} />
         </Field>
         <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
           <Button type="submit" disabled={saving}>
-            {saving ? 'Saving…' : editing ? 'Save changes' : 'Create product'}
+            {saving ? 'Saving…' : editing ? 'Save changes' : 'Add product'}
           </Button>
-          <Button type="button" variant="secondary" onClick={onCancel}>
+          <Button type="button" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
         </div>
       </form>
-    </Card>
+    </Panel>
   )
 }

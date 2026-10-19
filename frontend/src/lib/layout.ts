@@ -1,11 +1,13 @@
 import type { Location, Warehouse } from '../api/types'
+import { formatDecimal } from './format'
 
 export function distanceFromCentre(warehouse: Warehouse, x: number, y: number): number {
   return Math.hypot(x - warehouse.x, y - warehouse.y)
 }
 
 export function fillText(used: number, capacity: number | null): string {
-  return capacity === null ? `${used} / no limit` : `${used} / ${capacity}`
+  const stored = formatDecimal(String(used))
+  return capacity === null ? `${stored} / no limit` : `${stored} / ${formatDecimal(String(capacity))}`
 }
 
 export function fillPercent(used: number, capacity: number | null): number {
