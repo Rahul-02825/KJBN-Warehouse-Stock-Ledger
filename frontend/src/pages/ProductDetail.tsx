@@ -47,7 +47,20 @@ export function ProductDetail() {
       <Link to="/products" className="text-sm text-emerald-700 hover:underline">
         ← Products
       </Link>
-      <PageHeader title={`${p.sku} · ${p.name}`} description={`Measured in ${p.unit}. Every quantity below is explained by the ledger at the bottom.`} />
+      <PageHeader
+        title={`${p.sku} · ${p.name}`}
+        description={`Measured in ${p.unit}. Every quantity below is explained by the ledger at the bottom.`}
+        actions={
+          <>
+            <Link to={`/receive?product=${p.id}`} className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800">
+              Receive
+            </Link>
+            <Link to={`/ship?product=${p.id}`} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+              Ship
+            </Link>
+          </>
+        }
+      />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total on hand" value={formatQuantity(balances.data.total_quantity, p.unit)} tone={isLow ? 'warning' : 'default'} />

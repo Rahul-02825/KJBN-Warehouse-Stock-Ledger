@@ -5,6 +5,8 @@ import { Locations } from './pages/Locations'
 import { NotFound } from './pages/NotFound'
 import { ProductDetail } from './pages/ProductDetail'
 import { Products } from './pages/Products'
+import { Receive } from './pages/Receive'
+import { Ship } from './pages/Ship'
 import { StockOverview } from './pages/StockOverview'
 
 export default function App() {
@@ -17,6 +19,8 @@ export default function App() {
           <Route path="products/:id" element={<ProductDetail />} />
           <Route path="locations" element={<Locations />} />
           <Route path="stock" element={<StockOverview />} />
+          <Route path="receive" element={<Receive />} />
+          <Route path="ship" element={<Ship />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
