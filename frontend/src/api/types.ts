@@ -132,3 +132,17 @@ export const ADJUSTMENT_REASONS = [
   { value: 'theft', label: 'Theft' },
   { value: 'other', label: 'Other (note required)' },
 ] as const
+
+// A movement with names and reversal status, as listed in history and shown in detail.
+export interface MovementDetail extends Movement {
+  sku: string
+  product_name: string
+  unit: Unit
+  from_location_code: string | null
+  to_location_code: string | null
+  is_reversed: boolean
+  reversed_by_id: number | null
+  entries?: { location_id: number; quantity_delta: Decimal; unit_cost: Decimal | null }[]
+}
+
+export const MOVEMENT_TYPES: MovementType[] = ['IN', 'OUT', 'TRANSFER', 'ADJUSTMENT', 'REVERSAL']

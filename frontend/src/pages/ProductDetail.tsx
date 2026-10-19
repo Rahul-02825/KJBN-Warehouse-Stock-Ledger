@@ -99,7 +99,11 @@ export function ProductDetail() {
           {ledger.data.data.map((e, i) => (
             <tr key={i} className="hover:bg-slate-50">
               <Td className="text-slate-500">{formatDateTime(e.created_at)}</Td>
-              <Td className="tabular-nums">#{e.movement_id}</Td>
+              <Td>
+                <Link to={`/movements/${e.movement_id}`} className="tabular-nums text-emerald-700 hover:underline">
+                  #{e.movement_id}
+                </Link>
+              </Td>
               <Td>
                 <MovementBadge type={e.type} />
               </Td>

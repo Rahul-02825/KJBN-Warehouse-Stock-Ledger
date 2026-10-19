@@ -22,6 +22,7 @@ const navGroups = [
       { to: '/adjust', label: 'Adjust' },
     ],
   },
+  { title: 'History', links: [{ to: '/movements', label: 'Movements' }] },
 ]
 
 export function Layout() {
