@@ -64,11 +64,10 @@ SELECT
     l.y,
     l.capacity,
     l.auto_place,
-    COALESCE(SUM(sb.quantity) FILTER (WHERE p.unit = 'pcs'), 0)::BIGINT AS used,
-    COALESCE(SUM(sb.quantity) FILTER (WHERE sb.product_id = $1), 0)::BIGINT AS product_quantity
+    COALESCE(SUM(sb.quantity), 0)::NUMERIC(18, 4) AS used,
+    COALESCE(SUM(sb.quantity) FILTER (WHERE sb.product_id = $1), 0)::NUMERIC(18, 4) AS product_quantity
 FROM locations l
 LEFT JOIN stock_balances sb ON sb.location_id = l.id
-LEFT JOIN products p ON p.id = sb.product_id
 WHERE l.warehouse_id = $2
 GROUP BY l.id
 ORDER BY l.id
@@ -80,14 +79,14 @@ type ListBinUsageParams struct {
 }
 
 type ListBinUsageRow struct {
-	ID              int64       `json:"id"`
-	Code            string      `json:"code"`
-	X               float64     `json:"x"`
-	Y               float64     `json:"y"`
-	Capacity        pgtype.Int8 `json:"capacity"`
-	AutoPlace       bool        `json:"auto_place"`
-	Used            int64       `json:"used"`
-	ProductQuantity int64       `json:"product_quantity"`
+	ID              int64          `json:"id"`
+	Code            string         `json:"code"`
+	X               float64        `json:"x"`
+	Y               float64        `json:"y"`
+	Capacity        pgtype.Int8    `json:"capacity"`
+	AutoPlace       bool           `json:"auto_place"`
+	Used            pgtype.Numeric `json:"used"`
+	ProductQuantity pgtype.Numeric `json:"product_quantity"`
 }
 
 func (q *Queries) ListBinUsage(ctx context.Context, arg ListBinUsageParams) ([]ListBinUsageRow, error) {
@@ -126,9 +125,8 @@ SELECT
         SELECT SUM(sb.quantity)
         FROM stock_balances sb
         JOIN locations l ON l.id = sb.location_id
-        JOIN products p ON p.id = sb.product_id
-        WHERE l.warehouse_id = w.id AND p.unit = 'pcs'
-    ), 0)::BIGINT AS used
+        WHERE l.warehouse_id = w.id
+    ), 0)::NUMERIC(18, 4) AS used
 FROM warehouses w
 ORDER BY w.id
 `
@@ -142,7 +140,7 @@ type ListWarehousesRow struct {
 	RadiusM   float64            `json:"radius_m"`
 	Capacity  pgtype.Int8        `json:"capacity"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	Used      int64              `json:"used"`
+	Used      pgtype.Numeric     `json:"used"`
 }
 
 func (q *Queries) ListWarehouses(ctx context.Context) ([]ListWarehousesRow, error) {

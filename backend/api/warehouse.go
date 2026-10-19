@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"math"
 	"net/http"
@@ -21,18 +22,19 @@ func NewWarehouseHandler(q *sqlc.Queries) *WarehouseHandler {
 
 func (h *WarehouseHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/warehouses", h.list)
-	mux.HandleFunc("POST /api/placements/preview", h.preview)
+	mux.HandleFunc("POST /api/placements/preview", h.previewPlacement)
+	mux.HandleFunc("POST /api/picks/preview", h.previewPick)
 }
 
 type warehouseResponse struct {
-	ID       int64   `json:"id"`
-	Code     string  `json:"code"`
-	Name     string  `json:"name"`
-	X        float64 `json:"x"`
-	Y        float64 `json:"y"`
-	RadiusM  float64 `json:"radius_m"`
-	Capacity *int64  `json:"capacity"`
-	Used     int64   `json:"used"`
+	ID       int64           `json:"id"`
+	Code     string          `json:"code"`
+	Name     string          `json:"name"`
+	X        float64         `json:"x"`
+	Y        float64         `json:"y"`
+	RadiusM  float64         `json:"radius_m"`
+	Capacity *int64          `json:"capacity"`
+	Used     decimal.Decimal `json:"used"`
 }
 
 func (h *WarehouseHandler) list(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +47,7 @@ func (h *WarehouseHandler) list(w http.ResponseWriter, r *http.Request) {
 	for i, row := range rows {
 		data[i] = warehouseResponse{
 			ID: row.ID, Code: row.Code, Name: row.Name, X: row.X, Y: row.Y,
-			RadiusM: row.RadiusM, Capacity: idPtr(row.Capacity), Used: row.Used,
+			RadiusM: row.RadiusM, Capacity: idPtr(row.Capacity), Used: toDecimal(row.Used),
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})
@@ -63,20 +65,27 @@ func (r *PreviewRequest) validate() map[string]string {
 	checkIDs(f, map[string]int64{"product_id": r.ProductID})
 	checkOptionalIDs(f, map[string]int64{"location_id": r.LocationID, "warehouse_id": r.WarehouseID})
 	checkAmount(f, "quantity", r.Quantity)
-	if _, ok := f["quantity"]; !ok && !r.Quantity.Equal(r.Quantity.Truncate(0)) {
-		f["quantity"] = "must be a whole number of items"
-	}
 	return f
 }
 
 type allocationResponse struct {
-	LocationID int64   `json:"location_id"`
-	Code       string  `json:"location_code"`
-	Quantity   int64   `json:"quantity"`
-	DistanceM  float64 `json:"distance_m"`
+	LocationID int64           `json:"location_id"`
+	Code       string          `json:"location_code"`
+	Quantity   decimal.Decimal `json:"quantity"`
+	DistanceM  float64         `json:"distance_m"`
 }
 
-func (h *WarehouseHandler) preview(w http.ResponseWriter, r *http.Request) {
+type planner func(ctx context.Context, q *sqlc.Queries, warehouse sqlc.Warehouse, product sqlc.Product, amount decimal.Decimal, locationID int64) (binPlan, error)
+
+func (h *WarehouseHandler) previewPlacement(w http.ResponseWriter, r *http.Request) {
+	h.preview(w, r, planReceipt)
+}
+
+func (h *WarehouseHandler) previewPick(w http.ResponseWriter, r *http.Request) {
+	h.preview(w, r, planPick)
+}
+
+func (h *WarehouseHandler) preview(w http.ResponseWriter, r *http.Request, plan planner) {
 	var req PreviewRequest
 	if !readJSON(w, r, &req) || !valid(w, req.validate()) {
 		return
@@ -90,8 +99,8 @@ func (h *WarehouseHandler) preview(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w, err)
 		return
 	}
-	if product.Unit != "pcs" {
-		writeValidationError(w, map[string]string{"product_id": "automatic placement applies to pcs products only"})
+	if product.Unit == "pcs" && !req.Quantity.Equal(req.Quantity.Truncate(0)) {
+		writeValidationError(w, map[string]string{"quantity": "must be a whole number for pcs"})
 		return
 	}
 
@@ -100,26 +109,27 @@ func (h *WarehouseHandler) preview(w http.ResponseWriter, r *http.Request) {
 		writePostingError(w, r, err)
 		return
 	}
-	plan, err := planReceipt(r.Context(), h.q, warehouse, product.ID, req.Quantity.IntPart(), req.LocationID)
+	result, err := plan(r.Context(), h.q, warehouse, product, req.Quantity, req.LocationID)
 	if err != nil {
 		writePostingError(w, r, err)
 		return
 	}
 
-	allocations := make([]allocationResponse, len(plan.Allocations))
-	for i, a := range plan.Allocations {
+	allocations := make([]allocationResponse, len(result.Allocations))
+	for i, a := range result.Allocations {
 		allocations[i] = allocationResponse{
 			LocationID: a.Bin.ID,
 			Code:       a.Bin.Code,
-			Quantity:   a.Quantity,
+			Quantity:   fromUnits(a.Quantity),
 			DistanceM:  math.Round(a.Distance*100) / 100,
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"warehouse_id":        warehouse.ID,
-		"start_location_id":   plan.Start.ID,
-		"start_location_code": plan.Start.Code,
-		"reason":              plan.Reason,
+		"unit":                product.Unit,
+		"start_location_id":   result.Start.ID,
+		"start_location_code": result.Start.Code,
+		"reason":              result.Reason,
 		"allocations":         allocations,
 	})
 }

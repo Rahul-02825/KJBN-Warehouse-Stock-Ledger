@@ -52,15 +52,15 @@ var warehouse = sqlc.UpsertWarehouseParams{
 	X:        0,
 	Y:        0,
 	RadiusM:  50,
-	Capacity: pgtype.Int8{Int64: 1000, Valid: true},
+	Capacity: pgtype.Int8{Int64: 2000, Valid: true},
 }
 
 var locations = []location{
-	{"A-01", "Rack A, bin 1", 5, 2, 120, true},
-	{"A-02", "Rack A, bin 2", 5, 8, 100, true},
-	{"B-01", "Rack B, bin 1", 15, 2, 80, true},
-	{"B-02", "Rack B, bin 2", 15, 8, 80, true},
-	{"COLD-01", "Chilled store", 30, 5, 50, true},
+	{"A-01", "Rack A, bin 1", 5, 2, 150, true},
+	{"A-02", "Rack A, bin 2", 5, 8, 300, true},
+	{"B-01", "Rack B, bin 1", 15, 2, 300, true},
+	{"B-02", "Rack B, bin 2", 15, 8, 120, true},
+	{"COLD-01", "Chilled store", 30, 5, 100, true},
 	{"DOCK", "Receiving dock", 0, 0, 0, false},
 }
 

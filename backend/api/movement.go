@@ -59,18 +59,20 @@ func (r *InRequest) validate() map[string]string {
 }
 
 type OutRequest struct {
-	ProductID  int64           `json:"product_id"`
-	LocationID int64           `json:"location_id"`
-	Quantity   decimal.Decimal `json:"quantity"`
-	Reference  string          `json:"reference"`
-	CreatedBy  string          `json:"created_by"`
+	ProductID   int64           `json:"product_id"`
+	LocationID  int64           `json:"location_id"`
+	WarehouseID int64           `json:"warehouse_id"`
+	Quantity    decimal.Decimal `json:"quantity"`
+	Reference   string          `json:"reference"`
+	CreatedBy   string          `json:"created_by"`
 
 	IdempotencyKey string `json:"-"`
 }
 
 func (r *OutRequest) validate() map[string]string {
 	f := map[string]string{}
-	checkIDs(f, map[string]int64{"product_id": r.ProductID, "location_id": r.LocationID})
+	checkIDs(f, map[string]int64{"product_id": r.ProductID})
+	checkOptionalIDs(f, map[string]int64{"location_id": r.LocationID, "warehouse_id": r.WarehouseID})
 	checkAmount(f, "quantity", r.Quantity)
 	r.Reference, r.CreatedBy = checkText(f, r.Reference, r.CreatedBy)
 	return f
@@ -394,7 +396,7 @@ func writePostingError(w http.ResponseWriter, r *http.Request, err error) {
 		writeJSON(w, http.StatusConflict, map[string]errorBody{"error": {
 			Code:    "NO_SPACE",
 			Message: ns.Error(),
-			Details: map[string]string{"fit": strconv.FormatInt(ns.fit, 10), "requested": strconv.FormatInt(ns.requested, 10)},
+			Details: map[string]string{"fit": fromUnits(ns.fit).String(), "requested": fromUnits(ns.requested).String()},
 		}})
 	case isNumericOverflow(err):
 		writeError(w, http.StatusBadRequest, "OUT_OF_RANGE", "a resulting quantity or value is too large")
