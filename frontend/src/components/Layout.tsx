@@ -12,7 +12,14 @@ const navGroups = [
       { to: '/locations', label: 'Locations' },
     ],
   },
-  { title: 'Stock', links: [{ to: '/stock', label: 'Stock overview' }] },
+  {
+    title: 'Stock',
+    links: [
+      { to: '/stock', label: 'Stock overview' },
+      { to: '/receive', label: 'Receive' },
+      { to: '/ship', label: 'Ship' },
+    ],
+  },
 ]
 
 export function Layout() {

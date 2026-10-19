@@ -106,3 +106,21 @@ export interface ProductLedger {
   unit: Unit
   data: LedgerEntry[]
 }
+
+// A posted movement as returned by the posting endpoints.
+export interface Movement {
+  id: number
+  type: MovementType
+  product_id: number
+  from_location_id: number | null
+  to_location_id: number | null
+  quantity: Decimal
+  unit_cost: Decimal | null
+  total_value: Decimal | null
+  reference: string
+  reason: string | null
+  note: string
+  created_by: string
+  reverses_movement_id: number | null
+  created_at: string
+}
