@@ -5,15 +5,15 @@ export function Pagination({ page, pageSize, total, onPage }: { page: number; pa
   const first = (page - 1) * pageSize + 1
   const last = Math.min(page * pageSize, total)
   return (
-    <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
-      <span>
-        Showing {first}–{last} of {total}
+    <div className="mt-4 flex items-center justify-between text-sm text-muted">
+      <span className="num">
+        {first}–{last} of {total}
       </span>
       <div className="flex gap-2">
-        <Button variant="secondary" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+        <Button variant="ghost" className="px-3.5 py-1.5" disabled={page <= 1} onClick={() => onPage(page - 1)}>
           Previous
         </Button>
-        <Button variant="secondary" disabled={last >= total} onClick={() => onPage(page + 1)}>
+        <Button variant="ghost" className="px-3.5 py-1.5" disabled={last >= total} onClick={() => onPage(page + 1)}>
           Next
         </Button>
       </div>

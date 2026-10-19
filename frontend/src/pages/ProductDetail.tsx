@@ -1,8 +1,8 @@
 import { Link, useParams } from 'react-router'
 import type { ListResponse, LowStockRow, Product, ProductBalances, ProductLedger } from '../api/types'
 import { Delta, MovementBadge } from '../components/MovementBadge'
-import { Table, Td } from '../components/Table'
-import { Card, EmptyState, ErrorAlert, PageHeader, Spinner, StatCard } from '../components/ui'
+import { Row, Table, Td } from '../components/Table'
+import { ButtonLink, EmptyState, ErrorAlert, Eyebrow, Spinner, Stat } from '../components/ui'
 import { formatDateTime, formatDecimal, formatMoney, formatQuantity } from '../lib/format'
 import { useApi } from '../lib/useApi'
 
@@ -15,27 +15,14 @@ export function ProductDetail() {
 
   if (product.error?.code === 'NOT_FOUND' || product.error?.code === 'BAD_REQUEST') {
     return (
-      <EmptyState title="Product not found">
-        <Link to="/products" className="text-emerald-700 underline">
-          Back to products
-        </Link>
+      <EmptyState title="Product not found" action={<Link to="/products" className="link text-sm">Back to products</Link>}>
+        Check the link, or find the product in the catalogue.
       </EmptyState>
     )
   }
-  const error = product.error ?? balances.error ?? ledger.error ?? lowStock.error
-  if (error) {
-    return (
-      <ErrorAlert
-        error={error}
-        onRetry={() => {
-          product.reload()
-          balances.reload()
-          ledger.reload()
-          lowStock.reload()
-        }}
-      />
-    )
-  }
+  const all = [product, balances, ledger, lowStock]
+  const error = all.find((r) => r.error)?.error ?? null
+  if (error) return <ErrorAlert error={error} onRetry={() => all.forEach((r) => r.reload())} />
   if (!product.data || !balances.data || !ledger.data || !lowStock.data) return <Spinner />
 
   const p = product.data
@@ -44,82 +31,90 @@ export function ProductDetail() {
 
   return (
     <>
-      <Link to="/products" className="text-sm text-emerald-700 hover:underline">
-        ← Products
+      <Link to="/products" className="link text-sm">
+        Products
       </Link>
-      <PageHeader
-        title={`${p.sku} · ${p.name}`}
-        description={`Measured in ${p.unit}. Every quantity below is explained by the ledger at the bottom.`}
-        actions={
-          <>
-            <Link to={`/receive?product=${p.id}`} className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800">
-              Receive
-            </Link>
-            <Link to={`/ship?product=${p.id}`} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
-              Ship
-            </Link>
-            <Link to={`/transfer?product=${p.id}`} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
-              Transfer
-            </Link>
-            <Link to={`/adjust?product=${p.id}`} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
-              Adjust
-            </Link>
-          </>
-        }
-      />
+      <header className="mb-10 mt-6 flex flex-wrap items-end justify-between gap-6">
+        <div>
+          <Eyebrow className="mb-4">{p.sku}</Eyebrow>
+          <h1 className="text-[clamp(30px,4.4vw,48px)] font-semibold leading-[1.06] tracking-[-0.025em]">{p.name}</h1>
+          <p className="mt-3 text-[15.5px] text-muted">Counted in {p.unit}. Every number on this page is explained by the ledger below.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <ButtonLink to={`/record/receive?product=${p.id}`}>Receive</ButtonLink>
+          <ButtonLink to={`/record/ship?product=${p.id}`} variant="ghost">
+            Ship
+          </ButtonLink>
+          <ButtonLink to={`/record/transfer?product=${p.id}`} variant="ghost">
+            Transfer
+          </ButtonLink>
+          <ButtonLink to={`/record/adjust?product=${p.id}`} variant="ghost">
+            Adjust
+          </ButtonLink>
+        </div>
+      </header>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total on hand" value={formatQuantity(balances.data.total_quantity, p.unit)} tone={isLow ? 'warning' : 'default'} />
-        <StatCard label="Reorder level" value={formatQuantity(p.reorder_level, p.unit)} />
-        <StatCard label="Average cost" value={formatMoney(p.average_cost)} />
-        <StatCard label="Status" value={isLow ? 'Low stock' : 'OK'} tone={isLow ? 'warning' : 'default'} />
+      <div className="mb-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat label="On hand" value={formatQuantity(balances.data.total_quantity, p.unit)} tone={isLow ? 'warning' : 'default'} />
+        <Stat label="Reorder level" value={formatQuantity(p.reorder_level, p.unit)} />
+        <Stat label="Average cost" value={formatMoney(p.average_cost)} />
+        <Stat label="Status" value={isLow ? 'Reorder now' : 'In stock'} tone={isLow ? 'warning' : 'success'} />
       </div>
 
-      <Card title="Stock by bin" className="mb-6">
+      <section className="mb-12">
+        <h2 className="mb-4 font-serif text-[clamp(22px,2.6vw,30px)] leading-tight">Where it is</h2>
         {bins.length === 0 ? (
-          <p className="text-sm text-slate-500">No stock in any bin.</p>
+          <p className="text-muted">Not in any bin right now.</p>
         ) : (
-          <div className="flex flex-wrap gap-3">
+          <ul className="flex flex-wrap gap-3">
             {bins.map((b) => (
-              <div key={b.location_id} className="rounded-md border border-slate-200 px-3 py-2">
-                <p className="font-mono text-xs text-slate-500">{b.location_code}</p>
-                <p className="font-semibold tabular-nums">{formatQuantity(b.quantity, p.unit)}</p>
-              </div>
+              <li key={b.location_id} className="min-w-32 rounded-panel border border-line px-4 py-3">
+                <p className="code text-muted">{b.location_code}</p>
+                <p className="num mt-0.5 font-serif text-xl">{formatQuantity(b.quantity, p.unit)}</p>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
-      </Card>
+      </section>
 
-      <h2 className="mb-1 text-lg font-semibold">Ledger</h2>
-      <p className="mb-3 text-sm text-slate-500">Oldest first. Each row is one stock change; running totals show the balance right after it.</p>
-      {ledger.data.data.length === 0 ? (
-        <EmptyState title="No movements yet">Receive stock to start this product's ledger.</EmptyState>
-      ) : (
-        <Table head={['Date (IST)', 'Movement', 'Type', 'Bin', 'Change', 'Unit cost', 'Bin balance', 'Total balance', 'Reference', 'By']} numeric={[4, 5, 6, 7]}>
-          {ledger.data.data.map((e, i) => (
-            <tr key={i} className="hover:bg-slate-50">
-              <Td className="text-slate-500">{formatDateTime(e.created_at)}</Td>
-              <Td>
-                <Link to={`/movements/${e.movement_id}`} className="tabular-nums text-emerald-700 hover:underline">
-                  #{e.movement_id}
-                </Link>
-              </Td>
-              <Td>
-                <MovementBadge type={e.type} />
-              </Td>
-              <Td className="font-mono">{e.location_code}</Td>
-              <Td className="text-right">
-                <Delta value={formatDecimal(e.quantity_delta)} />
-              </Td>
-              <Td className="text-right tabular-nums">{formatMoney(e.unit_cost)}</Td>
-              <Td className="text-right tabular-nums">{formatDecimal(e.running_location_balance)}</Td>
-              <Td className="text-right font-semibold tabular-nums">{formatDecimal(e.running_total)}</Td>
-              <Td className="text-slate-600">{[e.reference, e.reason?.replace('_', ' ')].filter(Boolean).join(' · ') || '—'}</Td>
-              <Td className="text-slate-500">{e.created_by}</Td>
-            </tr>
-          ))}
-        </Table>
-      )}
+      <section>
+        <h2 className="mb-1 font-serif text-[clamp(22px,2.6vw,30px)] leading-tight">Ledger</h2>
+        <p className="mb-4 text-sm text-muted">Oldest first. Each row is one change; the balances show what was left right after it.</p>
+        {ledger.data.data.length === 0 ? (
+          <EmptyState title="No movements yet" action={<ButtonLink to={`/record/receive?product=${p.id}`}>Receive stock</ButtonLink>}>
+            The ledger starts with the first receipt.
+          </EmptyState>
+        ) : (
+          <Table head={['Posted (IST)', 'No.', 'Type', 'Bin', 'Change', 'Unit cost', 'Bin balance', 'Total', 'Reference', 'By']} numeric={[4, 5, 6, 7]}>
+            {ledger.data.data.map((e, i) => (
+              <Row key={i}>
+                <Td className="text-muted">{formatDateTime(e.created_at)}</Td>
+                <Td>
+                  <Link to={`/movements/${e.movement_id}`} className="link-quiet code">
+                    #{e.movement_id}
+                  </Link>
+                </Td>
+                <Td>
+                  <MovementBadge type={e.type} />
+                </Td>
+                <Td className="code">{e.location_code}</Td>
+                <Td numeric>
+                  <Delta value={formatDecimal(e.quantity_delta)} />
+                </Td>
+                <Td numeric className="text-muted">
+                  {formatMoney(e.unit_cost)}
+                </Td>
+                <Td numeric>{formatDecimal(e.running_location_balance)}</Td>
+                <Td numeric className="font-medium">
+                  {formatDecimal(e.running_total)}
+                </Td>
+                <Td className="max-w-56 truncate text-muted">{[e.reference, e.reason?.replace('_', ' ')].filter(Boolean).join(', ') || '–'}</Td>
+                <Td className="text-muted">{e.created_by}</Td>
+              </Row>
+            ))}
+          </Table>
+        )}
+      </section>
     </>
   )
 }
