@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router'
 import { Layout } from './components/Layout'
 import { Dashboard } from './pages/Dashboard'
+import { Locations } from './pages/Locations'
 import { NotFound } from './pages/NotFound'
 import { Products } from './pages/Products'
 
@@ -11,6 +12,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="products" element={<Products />} />
+          <Route path="locations" element={<Locations />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
