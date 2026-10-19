@@ -83,10 +83,12 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
 export function ErrorAlert({ error, onRetry }: { error: ApiError | Error | null; onRetry?: () => void }) {
   if (!error) return null
   const code = error instanceof ApiError ? error.code : undefined
+  // The API hides internal details on purpose; say so in plain words.
+  const message = code === 'INTERNAL' ? 'The server hit an unexpected error. Check the API logs for details.' : error.message
   return (
     <div className="mb-4 flex items-start justify-between gap-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">
       <div>
-        <p className="font-medium">{error.message}</p>
+        <p className="font-medium">{message}</p>
         {code && code !== 'NETWORK' && <p className="mt-0.5 text-xs text-red-600">{code}</p>}
       </div>
       {onRetry && (

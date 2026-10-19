@@ -3,6 +3,8 @@ import { Layout } from './components/Layout'
 import { Adjust } from './pages/Adjust'
 import { Dashboard } from './pages/Dashboard'
 import { Locations } from './pages/Locations'
+import { MovementDetailPage } from './pages/MovementDetailPage'
+import { MovementHistory } from './pages/MovementHistory'
 import { NotFound } from './pages/NotFound'
 import { ProductDetail } from './pages/ProductDetail'
 import { Products } from './pages/Products'
@@ -25,6 +27,8 @@ export default function App() {
           <Route path="ship" element={<Ship />} />
           <Route path="transfer" element={<Transfer />} />
           <Route path="adjust" element={<Adjust />} />
+          <Route path="movements" element={<MovementHistory />} />
+          <Route path="movements/:id" element={<MovementDetailPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
