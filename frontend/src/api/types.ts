@@ -124,3 +124,11 @@ export interface Movement {
   reverses_movement_id: number | null
   created_at: string
 }
+
+export const ADJUSTMENT_REASONS = [
+  { value: 'damaged', label: 'Damaged' },
+  { value: 'expired', label: 'Expired' },
+  { value: 'count_correction', label: 'Count correction' },
+  { value: 'theft', label: 'Theft' },
+  { value: 'other', label: 'Other (note required)' },
+] as const

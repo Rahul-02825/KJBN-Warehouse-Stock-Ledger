@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router'
 import { Layout } from './components/Layout'
+import { Adjust } from './pages/Adjust'
 import { Dashboard } from './pages/Dashboard'
 import { Locations } from './pages/Locations'
 import { NotFound } from './pages/NotFound'
@@ -8,6 +9,7 @@ import { Products } from './pages/Products'
 import { Receive } from './pages/Receive'
 import { Ship } from './pages/Ship'
 import { StockOverview } from './pages/StockOverview'
+import { Transfer } from './pages/Transfer'
 
 export default function App() {
   return (
@@ -21,6 +23,8 @@ export default function App() {
           <Route path="stock" element={<StockOverview />} />
           <Route path="receive" element={<Receive />} />
           <Route path="ship" element={<Ship />} />
+          <Route path="transfer" element={<Transfer />} />
+          <Route path="adjust" element={<Adjust />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
