@@ -1,3 +1,6 @@
+import { ArrowLeft } from 'lucide-react'
+import { icon } from '../components/icon'
+import { movementIcons } from '../lib/navigation'
 import { Link, useParams } from 'react-router'
 import type { ListResponse, LowStockRow, Product, ProductBalances, ProductLedger } from '../api/types'
 import { Delta, MovementBadge } from '../components/MovementBadge'
@@ -31,7 +34,8 @@ export function ProductDetail() {
 
   return (
     <>
-      <Link to="/products" className="link text-sm">
+      <Link to="/products" className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors duration-200 hover:text-ink">
+        <ArrowLeft {...icon} />
         Products
       </Link>
       <header className="mb-10 mt-6 flex flex-wrap items-end justify-between gap-6">
@@ -41,14 +45,20 @@ export function ProductDetail() {
           <p className="mt-3 text-[15.5px] text-muted">Counted in {p.unit}. Every number on this page is explained by the ledger below.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <ButtonLink to={`/record/receive?product=${p.id}`}>Receive</ButtonLink>
+          <ButtonLink to={`/record/receive?product=${p.id}`}>
+            <movementIcons.receive {...icon} />
+            Receive
+          </ButtonLink>
           <ButtonLink to={`/record/ship?product=${p.id}`} variant="ghost">
+            <movementIcons.ship {...icon} />
             Ship
           </ButtonLink>
           <ButtonLink to={`/record/transfer?product=${p.id}`} variant="ghost">
+            <movementIcons.transfer {...icon} />
             Transfer
           </ButtonLink>
           <ButtonLink to={`/record/adjust?product=${p.id}`} variant="ghost">
+            <movementIcons.adjust {...icon} />
             Adjust
           </ButtonLink>
         </div>

@@ -29,9 +29,9 @@ export function PlacementPlan({ plan, error, mode = 'place' }: { plan: Placement
         {mode === 'pick' ? ' first' : ''}, {plan.reason}.
         {plan.allocations.length > 1 && (mode === 'pick' ? ' The rest comes from the nearest bins that hold it.' : ' The rest goes to the nearest bins with space.')}
       </p>
-      <ul className="mt-3 divide-y divide-line border-y border-line">
-        {plan.allocations.map((a) => (
-          <li key={a.location_id} className="flex items-baseline justify-between gap-3 py-2">
+      <ul key={plan.allocations.map((a) => `${a.location_id}:${a.quantity}`).join()} className="mt-3 divide-y divide-line border-y border-line">
+        {plan.allocations.map((a, i) => (
+          <li key={a.location_id} className="flex animate-rise items-baseline justify-between gap-3 py-2" style={{ animationDelay: `${i * 60}ms` }}>
             <span className="code">{a.location_code}</span>
             <span className="num">
               <span className="font-medium">{formatQuantity(a.quantity, plan.unit)}</span>

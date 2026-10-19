@@ -1,3 +1,5 @@
+import { RefreshCw } from 'lucide-react'
+import { icon } from '../../components/icon'
 import { Link } from 'react-router'
 import type { CostCheckRow } from '../../api/types'
 import { Row, Table, Td } from '../../components/Table'
@@ -15,6 +17,7 @@ export function CostCheck() {
         description="Replays every movement with the posting rules and compares the result with each product's stored average cost."
         actions={
           <Button variant="ghost" onClick={reload} disabled={loading}>
+            <RefreshCw {...icon} className={loading ? 'animate-spin' : ''} />
             {loading ? 'Checking…' : 'Check again'}
           </Button>
         }

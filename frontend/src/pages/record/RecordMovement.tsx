@@ -1,6 +1,7 @@
 import { Navigate, useParams, useSearchParams } from 'react-router'
 import { SectionTabs } from '../../components/SectionTabs'
 import { ErrorAlert, PageHeader, Spinner } from '../../components/ui'
+import { movementIcons } from '../../lib/navigation'
 import { useOptions } from '../../lib/useOptions'
 import { AdjustForm } from './AdjustForm'
 import { ReceiveForm } from './ReceiveForm'
@@ -32,10 +33,10 @@ export function RecordMovement() {
       <SectionTabs
         label="Movement type"
         tabs={[
-          { to: `/record/receive${query}`, label: 'Receive' },
-          { to: `/record/ship${query}`, label: 'Ship' },
-          { to: `/record/transfer${query}`, label: 'Transfer' },
-          { to: `/record/adjust${query}`, label: 'Adjust' },
+          { to: `/record/receive${query}`, label: 'Receive', Icon: movementIcons.receive },
+          { to: `/record/ship${query}`, label: 'Ship', Icon: movementIcons.ship },
+          { to: `/record/transfer${query}`, label: 'Transfer', Icon: movementIcons.transfer },
+          { to: `/record/adjust${query}`, label: 'Adjust', Icon: movementIcons.adjust },
         ]}
       />
       <ErrorAlert error={error} />

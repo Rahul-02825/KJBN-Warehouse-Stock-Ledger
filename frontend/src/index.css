@@ -33,6 +33,60 @@
   --ease-kjbn: cubic-bezier(.22, .61, .36, 1);
 
   --animate-reveal: reveal 0.85s var(--ease-kjbn) both;
+  --animate-rise: rise 0.4s var(--ease-kjbn) both;
+  --animate-fade-in: fade-in 0.25s var(--ease-kjbn) both;
+  --animate-grow-y: grow-y 0.7s var(--ease-kjbn) both;
+  --animate-grow-x: grow-x 0.8s var(--ease-kjbn) both;
+  --animate-pop: pop 0.24s var(--ease-kjbn) both;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes grow-y {
+    from {
+      transform: scaleY(0);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  @keyframes grow-x {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
 
   @keyframes reveal {
     from {
@@ -70,6 +124,14 @@
     outline: 2px solid var(--color-saffron);
     outline-offset: 3px;
     border-radius: 2px;
+  }
+
+  dialog[open] {
+    animation: var(--animate-pop);
+  }
+
+  dialog[open]::backdrop {
+    animation: var(--animate-fade-in);
   }
 
   ::selection {
