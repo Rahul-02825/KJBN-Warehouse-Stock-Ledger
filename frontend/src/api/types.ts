@@ -36,10 +36,7 @@ export interface ValuationResponse {
   total_value: Decimal
 }
 
-export interface ReconciliationResponse {
-  data: unknown[]
-  drift_count: number
-}
+
 
 export const UNITS = ['pcs', 'kg', 'litre'] as const
 export type Unit = (typeof UNITS)[number]
@@ -146,3 +143,61 @@ export interface MovementDetail extends Movement {
 }
 
 export const MOVEMENT_TYPES: MovementType[] = ['IN', 'OUT', 'TRANSFER', 'ADJUSTMENT', 'REVERSAL']
+
+export interface ReconciliationRow {
+  product_id: number
+  sku: string
+  location_id: number
+  location_code: string
+  cached_quantity: Decimal
+  ledger_quantity: Decimal
+  difference: Decimal
+}
+
+export interface CostCheckRow {
+  product_id: number
+  sku: string
+  name: string
+  stored_average: Decimal
+  recomputed_average: Decimal
+  difference: Decimal
+  matches: boolean
+}
+
+export interface ForecastRow {
+  product_id: number
+  sku: string
+  name: string
+  unit: Unit
+  last_year_demand: Decimal
+  current_stock: Decimal
+  gap: Decimal
+  average_cost: Decimal
+  gap_value: Decimal
+}
+
+export interface ActivityDay {
+  day: string
+  in_count: number
+  out_count: number
+  transfer_count: number
+  adjustment_count: number
+  reversal_count: number
+  in_value: Decimal
+  out_value: Decimal
+}
+
+export interface TopMover {
+  product_id: number
+  sku: string
+  name: string
+  unit: Unit
+  shipments: number
+  shipped_quantity: Decimal
+  shipped_value: Decimal
+}
+
+export interface ReconciliationResponse {
+  data: ReconciliationRow[]
+  drift_count: number
+}
