@@ -8,7 +8,7 @@ package sqlc
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
 const getEntriesForReversal = `-- name: GetEntriesForReversal :many
@@ -25,12 +25,12 @@ ORDER BY location_id, id
 `
 
 type GetEntriesForReversalRow struct {
-	ID            int64          `json:"id"`
-	MovementID    int64          `json:"movement_id"`
-	ProductID     int64          `json:"product_id"`
-	LocationID    int64          `json:"location_id"`
-	QuantityDelta pgtype.Numeric `json:"quantity_delta"`
-	UnitCost      pgtype.Numeric `json:"unit_cost"`
+	ID            int64            `json:"id"`
+	MovementID    int64            `json:"movement_id"`
+	ProductID     int64            `json:"product_id"`
+	LocationID    int64            `json:"location_id"`
+	QuantityDelta decimal.Decimal  `json:"quantity_delta"`
+	UnitCost      *decimal.Decimal `json:"unit_cost"`
 }
 
 // Entries of the original, ordered by location so balance locks are always
@@ -68,7 +68,7 @@ FROM movements
 WHERE reversal_of_id = $1
 `
 
-func (q *Queries) GetReversalForMovement(ctx context.Context, reversalOfID pgtype.Int8) (Movement, error) {
+func (q *Queries) GetReversalForMovement(ctx context.Context, reversalOfID *int64) (Movement, error) {
 	row := q.db.QueryRow(ctx, getReversalForMovement, reversalOfID)
 	var i Movement
 	err := row.Scan(

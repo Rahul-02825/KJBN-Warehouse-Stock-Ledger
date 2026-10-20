@@ -1,3 +1,5 @@
+import { Undo2 } from 'lucide-react'
+import { icon } from './icon'
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import type { MovementDetail } from '../api/types'
@@ -62,6 +64,7 @@ export function ReversePanel({ movement, onReversed }: { movement: MovementDetai
       {!open ? (
         <div className="flex flex-wrap items-center gap-4">
           <Button variant={expectedRejection ? 'ghost' : 'danger'} onClick={() => setOpen(true)}>
+            <Undo2 {...icon} />
             {expectedRejection ? 'Try to reverse' : 'Reverse this movement'}
           </Button>
           {expectedRejection && <span className="text-sm text-muted">{expectedRejection}</span>}

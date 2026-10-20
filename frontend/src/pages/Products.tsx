@@ -1,3 +1,5 @@
+import { Plus, Search } from 'lucide-react'
+import { icon } from '../components/icon'
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import type { PagedResponse, Product } from '../api/types'
@@ -48,7 +50,14 @@ export function Products() {
         eyebrow="Catalogue"
         title="Products"
         description="What the warehouse stores. The SKU and unit are fixed once created; the average cost changes only through receipts."
-        actions={editing === null && <Button onClick={() => startEditing('new')}>Add product</Button>}
+        actions={
+          editing === null && (
+            <Button onClick={() => startEditing('new')}>
+              <Plus {...icon} />
+              Add product
+            </Button>
+          )
+        }
       />
       <SectionTabs tabs={catalogueTabs} label="Catalogue" />
       {message && <SuccessAlert>{message}</SuccessAlert>}
@@ -59,6 +68,7 @@ export function Products() {
       <form onSubmit={applySearch} className="mb-5 flex max-w-md gap-2">
         <Input placeholder="Search by SKU or name" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} aria-label="Search products" />
         <Button type="submit" variant="ghost">
+          <Search {...icon} />
           Search
         </Button>
       </form>
@@ -70,7 +80,12 @@ export function Products() {
         search ? (
           <EmptyState title={`Nothing matches “${search}”`}>Try part of the SKU or a different word from the name.</EmptyState>
         ) : (
-          <EmptyState title="No products yet" action={<Button onClick={() => startEditing('new')}>Add product</Button>}>
+          <EmptyState title="No products yet" action={
+              <Button onClick={() => startEditing('new')}>
+                <Plus {...icon} />
+                Add product
+              </Button>
+            }>
             Add the first product, then receive stock into a bin.
           </EmptyState>
         )

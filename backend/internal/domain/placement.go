@@ -1,4 +1,4 @@
-package api
+package domain
 
 import (
 	"container/heap"
@@ -56,20 +56,20 @@ func ChooseStart(bins []Bin, receiving Point, step int64) (Bin, string, bool) {
 func Plan(start Bin, bins []Bin, quantity, step int64) ([]Allocation, int64) {
 	var plan []Allocation
 	remaining := quantity
-
-	place := func(bin Bin) {
-		n := min(remaining, bin.Free())
-		n -= n % step
-		if n > 0 {
-			plan = append(plan, Allocation{Bin: bin, Quantity: n, Distance: Distance(start.Position, bin.Position)})
-			remaining -= n
-		}
-	}
-
-	place(start)
 	nearest := newBinHeap(start.Position, placeableBins(bins, start.ID, step))
-	for remaining > 0 && nearest.Len() > 0 {
-		place(heap.Pop(nearest).(Bin))
+
+	bin := start
+	for {
+		amount := min(remaining, bin.Free())
+		amount -= amount % step
+		if amount > 0 {
+			plan = append(plan, Allocation{Bin: bin, Quantity: amount, Distance: Distance(start.Position, bin.Position)})
+			remaining -= amount
+		}
+		if remaining == 0 || nearest.Len() == 0 {
+			break
+		}
+		bin = heap.Pop(nearest).(Bin)
 	}
 	return plan, quantity - remaining
 }

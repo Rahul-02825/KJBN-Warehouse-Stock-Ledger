@@ -1,3 +1,4 @@
+import { ClipboardCheck } from 'lucide-react'
 import type { FormEvent, ReactNode } from 'react'
 import type { ApiError } from '../api/client'
 import { Button, ErrorAlert } from './ui'
@@ -30,7 +31,10 @@ export function MovementForm({
       </form>
       <aside className="self-start lg:sticky lg:top-[96px]">
         <div className="rounded-panel bg-paper-2 p-5">
-          <h2 className="mb-3 font-serif text-lg">Before you post</h2>
+          <h2 className="mb-3 flex items-center gap-2 font-serif text-lg">
+            <ClipboardCheck size={18} strokeWidth={1.5} className="text-petrol-line" aria-hidden />
+            Before you post
+          </h2>
           <div className="space-y-4 text-sm">{aside}</div>
         </div>
       </aside>

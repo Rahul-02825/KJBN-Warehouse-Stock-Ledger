@@ -2,6 +2,8 @@ package test
 
 import (
 	"context"
+	"encoding/csv"
+	"strings"
 	"testing"
 )
 
@@ -99,5 +101,23 @@ func TestProductLedger_RunningBalances(t *testing.T) {
 	status, _ := send(t, h, "GET", "/api/products/99/ledger", "")
 	if status != 404 {
 		t.Errorf("unknown product: %d, want 404", status)
+	}
+}
+
+func TestLedgerCSV(t *testing.T) {
+	h, _ := setupLayout(t)
+	mustSend(t, h, 201, "POST", "/api/movements/in", receiveInto(1, "1", 10))
+	mustSend(t, h, 201, "POST", "/api/movements/out", ship(1, "1", "4"))
+
+	rec := sendRaw(h, "GET", "/api/products/1/ledger?format=csv", "", nil)
+	if !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/csv") || !strings.Contains(rec.Header().Get("Content-Disposition"), "ledger-RICE.csv") {
+		t.Fatalf("headers = %v", rec.Header())
+	}
+	rows, err := csv.NewReader(rec.Body).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 3 || rows[0][0] != "posted_at" || rows[1][4] != "10" || rows[2][4] != "-4" || rows[2][7] != "6" {
+		t.Errorf("rows = %v, want header, +10 and -4 with a running total of 6", rows)
 	}
 }

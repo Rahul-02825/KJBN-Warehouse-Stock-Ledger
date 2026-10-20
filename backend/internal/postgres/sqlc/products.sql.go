@@ -8,7 +8,7 @@ package sqlc
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
 const countProducts = `-- name: CountProducts :one
@@ -19,7 +19,7 @@ WHERE ($1::TEXT IS NULL
        OR name ILIKE '%' || $1 || '%')
 `
 
-func (q *Queries) CountProducts(ctx context.Context, search pgtype.Text) (int64, error) {
+func (q *Queries) CountProducts(ctx context.Context, search *string) (int64, error) {
 	row := q.db.QueryRow(ctx, countProducts, search)
 	var count int64
 	err := row.Scan(&count)
@@ -33,10 +33,10 @@ RETURNING id, sku, name, unit, reorder_level, average_cost, created_at, updated_
 `
 
 type CreateProductParams struct {
-	Sku          string         `json:"sku"`
-	Name         string         `json:"name"`
-	Unit         string         `json:"unit"`
-	ReorderLevel pgtype.Numeric `json:"reorder_level"`
+	Sku          string          `json:"sku"`
+	Name         string          `json:"name"`
+	Unit         string          `json:"unit"`
+	ReorderLevel decimal.Decimal `json:"reorder_level"`
 }
 
 func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
@@ -116,9 +116,9 @@ OFFSET $2
 `
 
 type ListProductsParams struct {
-	Search     pgtype.Text `json:"search"`
-	PageOffset int32       `json:"page_offset"`
-	PageSize   int32       `json:"page_size"`
+	Search     *string `json:"search"`
+	PageOffset int32   `json:"page_offset"`
+	PageSize   int32   `json:"page_size"`
 }
 
 func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error) {
@@ -160,9 +160,9 @@ RETURNING id, sku, name, unit, reorder_level, average_cost, created_at, updated_
 `
 
 type UpdateProductDetailsParams struct {
-	Name         pgtype.Text    `json:"name"`
-	ReorderLevel pgtype.Numeric `json:"reorder_level"`
-	ID           int64          `json:"id"`
+	Name         *string          `json:"name"`
+	ReorderLevel *decimal.Decimal `json:"reorder_level"`
+	ID           int64            `json:"id"`
 }
 
 // Partial update: NULL arguments leave the column unchanged.

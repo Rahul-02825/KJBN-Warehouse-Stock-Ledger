@@ -90,8 +90,9 @@ paths:
     get:
       tags: [Reports]
       summary: Every ledger entry for a product with running balances
+      parameters: [ { $ref: '#/components/parameters/Format' } ]
       responses:
-        '200': { $ref: '#/components/responses/Object' }
+        '200': { $ref: '#/components/responses/ObjectOrCSV' }
         '404': { $ref: '#/components/responses/Error' }
 
   /api/locations:
@@ -345,6 +346,40 @@ paths:
                 note: { type: string }
                 created_by: { type: string }
       responses: *posting
+
+  /api/stock-takes:
+    post:
+      tags: [Movements]
+      summary: Count a bin and post a count-correction adjustment for every difference
+      description: |
+        Each line's difference is worked out from the current balance, so posting the same
+        count twice changes nothing the second time. All lines succeed or none do.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [location_id, counts, created_by]
+              properties:
+                location_id: { type: integer }
+                counts:
+                  type: array
+                  maxItems: 500
+                  items:
+                    type: object
+                    required: [product_id, counted]
+                    properties:
+                      product_id: { type: integer }
+                      counted: { $ref: '#/components/schemas/Decimal' }
+                note: { type: string }
+                reference: { type: string, description: Defaults to Stock take }
+                created_by: { type: string }
+      responses:
+        '201': { $ref: '#/components/responses/Object' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { description: NO_SPACE when a counted increase does not fit, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/movements:
     get:

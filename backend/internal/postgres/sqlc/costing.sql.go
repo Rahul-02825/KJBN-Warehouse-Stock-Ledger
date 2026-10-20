@@ -7,8 +7,9 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
 const getLedgerProductTotalQuantity = `-- name: GetLedgerProductTotalQuantity :one
@@ -19,9 +20,9 @@ WHERE product_id = $1
 
 // Ledger-derived total for a product. Used by costing consistency checks so
 // that the average is never silently computed from a drifted cache.
-func (q *Queries) GetLedgerProductTotalQuantity(ctx context.Context, productID int64) (pgtype.Numeric, error) {
+func (q *Queries) GetLedgerProductTotalQuantity(ctx context.Context, productID int64) (decimal.Decimal, error) {
 	row := q.db.QueryRow(ctx, getLedgerProductTotalQuantity, productID)
-	var total_quantity pgtype.Numeric
+	var total_quantity decimal.Decimal
 	err := row.Scan(&total_quantity)
 	return total_quantity, err
 }
@@ -43,13 +44,13 @@ ORDER BY m.product_id, m.id
 `
 
 type ListMovementsForCostCheckRow struct {
-	ID           int64          `json:"id"`
-	ProductID    int64          `json:"product_id"`
-	MovementType string         `json:"movement_type"`
-	Quantity     pgtype.Numeric `json:"quantity"`
-	UnitCost     pgtype.Numeric `json:"unit_cost"`
-	ReversedType string         `json:"reversed_type"`
-	NetDelta     pgtype.Numeric `json:"net_delta"`
+	ID           int64            `json:"id"`
+	ProductID    int64            `json:"product_id"`
+	MovementType string           `json:"movement_type"`
+	Quantity     decimal.Decimal  `json:"quantity"`
+	UnitCost     *decimal.Decimal `json:"unit_cost"`
+	ReversedType string           `json:"reversed_type"`
+	NetDelta     decimal.Decimal  `json:"net_delta"`
 }
 
 // Every movement in posting order, for replaying the average cost.
@@ -89,10 +90,10 @@ ORDER BY sku
 `
 
 type ListProductCostsRow struct {
-	ID          int64          `json:"id"`
-	Sku         string         `json:"sku"`
-	Name        string         `json:"name"`
-	AverageCost pgtype.Numeric `json:"average_cost"`
+	ID          int64           `json:"id"`
+	Sku         string          `json:"sku"`
+	Name        string          `json:"name"`
+	AverageCost decimal.Decimal `json:"average_cost"`
 }
 
 func (q *Queries) ListProductCosts(ctx context.Context) ([]ListProductCostsRow, error) {
@@ -154,15 +155,15 @@ RETURNING id, sku, average_cost, updated_at
 `
 
 type UpdateProductAverageCostParams struct {
-	ID          int64          `json:"id"`
-	AverageCost pgtype.Numeric `json:"average_cost"`
+	ID          int64           `json:"id"`
+	AverageCost decimal.Decimal `json:"average_cost"`
 }
 
 type UpdateProductAverageCostRow struct {
-	ID          int64              `json:"id"`
-	Sku         string             `json:"sku"`
-	AverageCost pgtype.Numeric     `json:"average_cost"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ID          int64           `json:"id"`
+	Sku         string          `json:"sku"`
+	AverageCost decimal.Decimal `json:"average_cost"`
+	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 func (q *Queries) UpdateProductAverageCost(ctx context.Context, arg UpdateProductAverageCostParams) (UpdateProductAverageCostRow, error) {

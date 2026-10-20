@@ -5,73 +5,75 @@
 package sqlc
 
 import (
-	"github.com/jackc/pgx/v5/pgtype"
+	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 type Location struct {
-	ID          int64              `json:"id"`
-	Code        string             `json:"code"`
-	Description string             `json:"description"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	WarehouseID int64              `json:"warehouse_id"`
-	X           float64            `json:"x"`
-	Y           float64            `json:"y"`
-	Capacity    pgtype.Int8        `json:"capacity"`
-	AutoPlace   bool               `json:"auto_place"`
+	ID          int64     `json:"id"`
+	Code        string    `json:"code"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	WarehouseID int64     `json:"warehouse_id"`
+	X           float64   `json:"x"`
+	Y           float64   `json:"y"`
+	Capacity    *int64    `json:"capacity"`
+	AutoPlace   bool      `json:"auto_place"`
 }
 
 type Movement struct {
-	ID             int64              `json:"id"`
-	ProductID      int64              `json:"product_id"`
-	MovementType   string             `json:"movement_type"`
-	FromLocationID pgtype.Int8        `json:"from_location_id"`
-	ToLocationID   pgtype.Int8        `json:"to_location_id"`
-	Quantity       pgtype.Numeric     `json:"quantity"`
-	UnitCost       pgtype.Numeric     `json:"unit_cost"`
-	Reference      string             `json:"reference"`
-	Reason         pgtype.Text        `json:"reason"`
-	Note           string             `json:"note"`
-	CreatedBy      string             `json:"created_by"`
-	ReversalOfID   pgtype.Int8        `json:"reversal_of_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	IdempotencyKey pgtype.Text        `json:"idempotency_key"`
+	ID             int64            `json:"id"`
+	ProductID      int64            `json:"product_id"`
+	MovementType   string           `json:"movement_type"`
+	FromLocationID *int64           `json:"from_location_id"`
+	ToLocationID   *int64           `json:"to_location_id"`
+	Quantity       decimal.Decimal  `json:"quantity"`
+	UnitCost       *decimal.Decimal `json:"unit_cost"`
+	Reference      string           `json:"reference"`
+	Reason         *string          `json:"reason"`
+	Note           string           `json:"note"`
+	CreatedBy      string           `json:"created_by"`
+	ReversalOfID   *int64           `json:"reversal_of_id"`
+	CreatedAt      time.Time        `json:"created_at"`
+	IdempotencyKey *string          `json:"idempotency_key"`
 }
 
 type MovementEntry struct {
-	ID            int64              `json:"id"`
-	MovementID    int64              `json:"movement_id"`
-	ProductID     int64              `json:"product_id"`
-	LocationID    int64              `json:"location_id"`
-	QuantityDelta pgtype.Numeric     `json:"quantity_delta"`
-	UnitCost      pgtype.Numeric     `json:"unit_cost"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID            int64            `json:"id"`
+	MovementID    int64            `json:"movement_id"`
+	ProductID     int64            `json:"product_id"`
+	LocationID    int64            `json:"location_id"`
+	QuantityDelta decimal.Decimal  `json:"quantity_delta"`
+	UnitCost      *decimal.Decimal `json:"unit_cost"`
+	CreatedAt     time.Time        `json:"created_at"`
 }
 
 type Product struct {
-	ID           int64              `json:"id"`
-	Sku          string             `json:"sku"`
-	Name         string             `json:"name"`
-	Unit         string             `json:"unit"`
-	ReorderLevel pgtype.Numeric     `json:"reorder_level"`
-	AverageCost  pgtype.Numeric     `json:"average_cost"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID           int64           `json:"id"`
+	Sku          string          `json:"sku"`
+	Name         string          `json:"name"`
+	Unit         string          `json:"unit"`
+	ReorderLevel decimal.Decimal `json:"reorder_level"`
+	AverageCost  decimal.Decimal `json:"average_cost"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
 type StockBalance struct {
-	ProductID  int64              `json:"product_id"`
-	LocationID int64              `json:"location_id"`
-	Quantity   pgtype.Numeric     `json:"quantity"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ProductID  int64           `json:"product_id"`
+	LocationID int64           `json:"location_id"`
+	Quantity   decimal.Decimal `json:"quantity"`
+	UpdatedAt  time.Time       `json:"updated_at"`
 }
 
 type Warehouse struct {
-	ID        int64              `json:"id"`
-	Code      string             `json:"code"`
-	Name      string             `json:"name"`
-	X         float64            `json:"x"`
-	Y         float64            `json:"y"`
-	RadiusM   float64            `json:"radius_m"`
-	Capacity  pgtype.Int8        `json:"capacity"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID        int64     `json:"id"`
+	Code      string    `json:"code"`
+	Name      string    `json:"name"`
+	X         float64   `json:"x"`
+	Y         float64   `json:"y"`
+	RadiusM   float64   `json:"radius_m"`
+	Capacity  *int64    `json:"capacity"`
+	CreatedAt time.Time `json:"created_at"`
 }
