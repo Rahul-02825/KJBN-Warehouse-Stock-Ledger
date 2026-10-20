@@ -14,7 +14,7 @@ Stock is never edited directly. Every change is recorded as an immutable movemen
 |---|---|
 | UI | not deployed |
 | API base URL | not deployed |
-| API docs (Swagger UI) | not deployed. Locally: `http://localhost:8080/api/docs` |
+| API docs (Swagger UI) | not deployed. Locally: `http://localhost:8080/api/docs`, also linked from the UI footer |
 
 There is no login, so no test credentials are needed (see assumption 16).
 
@@ -29,7 +29,7 @@ There is no login, so no test credentials are needed (see assumption 16).
 | Tests | Go `testing` against a real PostgreSQL; Vitest for frontend helpers |
 | CI | GitHub Actions (`.github/workflows/ci.yml`) |
 | Database hosting (development) | Supabase (PostgreSQL) or a local PostgreSQL 16 in Docker |
-| Backend and UI hosting | Not chosen yet (see section 2) |
+| Backend and UI hosting | Planned: API on Render (Docker, free tier), UI on Vercel. Not deployed yet (see section 2) |
 
 All choices are from the recommended stacks in the brief.
 
@@ -137,6 +137,8 @@ If your `.env` holds a `localhost` URL for the manual setup below, compose can't
 | `DATABASE_URL` | PostgreSQL connection string for the API, migrations and seed |
 | `PORT` | API port (default 8080) |
 | `TEST_DATABASE_URL` | A **separate, throwaway** database for `go test`. Tests empty every table. Leave it unset to skip the database tests |
+| `APP_ENV` | `production` hides raw error text in internal-error logs (section 9). Default `development` |
+| `CORS_ALLOWED_ORIGIN` | Browser origins allowed to call the API, comma-separated, for example the Vercel UI URL. Leave empty locally, where Vite and nginx proxy `/api` |
 
 The frontend has one optional variable, `VITE_API_URL` (`frontend/.env.example`). Leave it empty locally: Vite forwards `/api` to `http://localhost:8080`. Set it to the API URL for a hosted build.
 
@@ -178,10 +180,20 @@ Use a different env file with `make <target> ENV_FILE=../.env.local`.
 
 **Not deployed yet.** What exists today:
 - **Container builds:** `backend/Dockerfile` (the `api` and `seed` programs), `frontend/Dockerfile` (the built UI served by nginx, with `frontend/nginx.conf`) and `docker-compose.yml`, which runs the full stack locally. A hosting provider can build from the same Dockerfiles.
-- **CI** (`.github/workflows/ci.yml`) runs on every push and pull request, against a PostgreSQL 16 service container. It checks that the schema snapshot and the generated sqlc code are current, runs `gofmt` and `go vet`, builds, applies the migrations, runs the tests with coverage, and runs the load test against a live server.
+- **CI** (`.github/workflows/ci.yml`) runs on every push and pull request.
+  - **Backend job**, against a PostgreSQL 16 service container: checks that the schema snapshot and the generated sqlc code are current, runs `gofmt`, `go vet` and the OpenAPI lint, builds, applies the migrations, runs the tests with coverage, and runs the load test against a live server.
+  - **Frontend job:** lint, type check, tests and production build.
 - **Migrate and seed** are `make migrate-up` and `make seed` (section 5). The seed is safe to rerun: it only adds what is missing.
 
-Not done yet: the hosting provider's config file, CORS for the hosted UI origin, the redeploy steps and the manual dashboard steps. This section will describe them step by step once they exist.
+- **Hosting config:** `render.yaml` (Render blueprint for the API: Docker, `/healthz` health check, `APP_ENV=production`) and `frontend/vercel.json` (sends every path to the app, so deep links work).
+- **Cross-origin support:** the API allows the origins in `CORS_ALLOWED_ORIGIN` and exposes `X-Request-ID`.
+
+**Planned setup:**
+- **API:** Render, from `render.yaml`.
+- **UI:** Vercel, with root directory `frontend` and `VITE_API_URL` set to the API URL.
+- **Database:** Supabase.
+
+The live URLs, the exact dashboard steps and the redeploy flow will be added here once it's deployed.
 
 **Re-seeding a database** (for example after a free-tier database is reset): run `make migrate-up` and then `make seed` against it.
 
@@ -198,15 +210,15 @@ Not done yet: the hosting provider's config file, CORS for the hosted UI origin,
 
 | Package | Coverage |
 |---|---|
-| **Overall backend** (`domain` + `ledger` + `httpapi`) | **86.6%** |
+| **Overall backend** (`domain` + `ledger` + `httpapi`) | **87.1%** |
 | **Business rules** (`domain` + `ledger`) | **89.8%** |
 | `internal/domain` | 97.3% |
 | `internal/ledger` | 88.3% |
-| `internal/httpapi` | 83.5% |
+| `internal/httpapi` | 84.6% |
 
-**What is covered** (94 backend tests and 22 frontend tests):
+**What is covered** (96 backend tests and 22 frontend tests):
 - **Unit tests in `internal/domain`:** weighted average including 1,000-receipt rounding drift, backing a receipt out of the average, quantity, unit, reorder-level and reason validation, and the bin planner.
-- **API-level tests in `backend/test/`:** every movement type, every error code, all reports, CSV exports, idempotency, stock take, and request-id logging.
+- **API-level tests in `backend/test/`:** every movement type, every error code, all reports, CSV exports, idempotency, stock take, request-id logging, CORS, and production-safe error logs.
 - **Every edge case named in the brief:** two OUTs racing for the last unit (25 rounds per run), a transfer whose destination write fails, concurrent and repeated reversals, IN with zero or negative cost (including the database constraint on its own), 120 real receipts checked for average drift, and reconciliation after a deliberately corrupted cache.
 - **After each movement test,** a check confirms the balance cache still matches the ledger.
 
@@ -340,7 +352,7 @@ Domain errors are separate Go types in `internal/domain/errors.go`. Every stock 
 | Every request | INFO | `request_id`, method, path, status, duration |
 | Movement posted | INFO | `request_id`, `movement_id`, type, `product_id` |
 | Rule violation or bad input | WARN | `request_id`, path, reason, plus the domain ids involved (`product_id`, `location_id`, `from_location_id`, `to_location_id`, `movement_id`, quantity) |
-| Unexpected error or panic | ERROR | `request_id`, path, the real error |
+| Unexpected error or panic | ERROR | `request_id`, path, and the real error. With `APP_ENV=production`, only the error kind (for a database error, its Postgres code and constraint name) |
 
 Request bodies, headers and secrets are never logged. **Where to see logs:** in the terminal running the API. There's no hosted instance yet, so there's no hosted log viewer (section 11).
 
@@ -362,11 +374,10 @@ Request bodies, headers and secrets are never logged. **Where to see logs:** in 
 
 ## 11. Known limitations
 
-- **Not deployed:** there is no hosting config, CORS setting for a hosted UI, or live URL yet. Sections 2 and 5a say so. The Dockerfiles and `docker-compose.yml` exist and run the full stack locally.
+- **Not deployed yet:** there are no live URLs. The Dockerfiles, `docker-compose.yml`, `render.yaml`, `frontend/vercel.json` and CORS support are in place (section 5a).
 - **No authentication;** `created_by` is free text.
 - **Batch or lot tracking with expiry** (a Stretch item) is not built. Stock take and the ledger CSV export are built.
 - **The Go code is checked only by `gofmt` and `go vet`,** with no stricter linter such as staticcheck. The frontend uses ESLint.
-- **CI runs only the backend.** Frontend lint, type check, tests and build are run locally.
 - **Frontend tests** cover helper functions only, not components or full user flows.
 - **Bin capacity treats every unit as one unit of space** (1 kg = 1 litre = 1 piece). It's a simplification, not a real volume or weight model.
 - **The cost check and reconciliation load all data in one pass,** which is fine at this scale. Neither can repair what it finds: a repair would have to be a separate, audited operation, which isn't built.
