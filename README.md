@@ -8,15 +8,17 @@ Stock is never edited directly. Every change is recorded as an immutable movemen
 
 ## 2. Live links
 
-**Not deployed yet.** Hosting (milestone M5) is still to be done, so there is no live UI, API or docs URL at the moment. Section 5 shows how to run everything locally in a few minutes. Once deployed, this section will list:
-
 | What | URL |
 |---|---|
-| UI | not deployed |
-| API base URL | not deployed |
-| API docs (Swagger UI) | not deployed. Locally: `http://localhost:8080/api/docs`, also linked from the UI footer |
+| UI | https://kjbn-warehouse-stock-ledger.vercel.app |
+| API base URL | https://stock-ledger-api-qa1e.onrender.com |
+| API docs (Swagger UI) | https://stock-ledger-api-qa1e.onrender.com/api/docs (also linked from the UI footer) |
+| Health check | https://stock-ledger-api-qa1e.onrender.com/healthz |
 
-There is no login, so no test credentials are needed (see assumption 16).
+The hosted database is already seeded with the sample data (section 10).
+
+- **Cold start:** the API is on Render's free tier, which sleeps after about 15 minutes without traffic. The first request after that takes roughly 30–60 seconds while it wakes up; later requests are fast. If the UI first shows "can't reach the API", wait a moment and reload.
+- **No login,** so no test credentials are needed (see assumption 16).
 
 ## 3. Tech stack
 
@@ -29,7 +31,7 @@ There is no login, so no test credentials are needed (see assumption 16).
 | Tests | Go `testing` against a real PostgreSQL; Vitest for frontend helpers |
 | CI | GitHub Actions (`.github/workflows/ci.yml`) |
 | Database hosting (development) | Supabase (PostgreSQL) or a local PostgreSQL 16 in Docker |
-| Backend and UI hosting | Planned: API on Render (Docker, free tier), UI on Vercel. Not deployed yet (see section 2) |
+| Backend and UI hosting | API on Render (Docker, free tier), UI on Vercel, database on Supabase (see section 5a) |
 
 All choices are from the recommended stacks in the brief.
 
@@ -178,24 +180,54 @@ Use a different env file with `make <target> ENV_FILE=../.env.local`.
 
 ## 5a. Deployment
 
-**Not deployed yet.** What exists today:
-- **Container builds:** `backend/Dockerfile` (the `api` and `seed` programs), `frontend/Dockerfile` (the built UI served by nginx, with `frontend/nginx.conf`) and `docker-compose.yml`, which runs the full stack locally. A hosting provider can build from the same Dockerfiles.
-- **CI** (`.github/workflows/ci.yml`) runs on every push and pull request.
+**What runs where:**
+
+| Part | Host | Built from |
+|---|---|---|
+| UI | Vercel | `frontend/` with `npm run build`; `frontend/vercel.json` sends every path to the app so deep links work |
+| API | Render (free tier, Docker) | `render.yaml` → `backend/Dockerfile`, health check `/healthz` |
+| Database | Supabase (PostgreSQL 17, Seoul region, Session pooler) | Migrated and seeded from a developer machine with `make migrate-up` and `make seed` |
+
+**How it was deployed:**
+1. **Database:**
+   - Create a Supabase project.
+   - Copy the **Session pooler** connection string from Connect → Connection String → Method: Session pooler. The direct connection is IPv6-only, and Render can't reach it.
+   - Put it in `.env` as `DATABASE_URL` (with `?sslmode=require`), then run `cd backend && make migrate-up && make seed`.
+2. **API:**
+   - Render → New → **Blueprint** → select this repository. Render reads `render.yaml`.
+   - In the dashboard, set `DATABASE_URL` to the Supabase URL. `APP_ENV=production` comes from the blueprint.
+   - Render builds `backend/Dockerfile`, and the API becomes reachable once `/healthz` returns `ok`.
+3. **UI:**
+   - Vercel → Add New → Project → import this repository.
+   - Set Root Directory to `frontend`, Framework to Vite, Build to `npm run build`, Output to `dist`.
+   - Set the environment variable `VITE_API_URL=https://stock-ledger-api-qa1e.onrender.com`.
+4. **Allow the UI to call the API:**
+   - In Render, add `CORS_ALLOWED_ORIGIN=https://kjbn-warehouse-stock-ledger.vercel.app` and redeploy.
+
+**Steps done by hand in provider dashboards** (everything else is in the repo):
+- **Supabase:** creating the project and copying the connection string.
+- **Render:** connecting the repository, and entering `DATABASE_URL` and `CORS_ALLOWED_ORIGIN`. Secrets never go in git.
+- **Vercel:** importing the repository, setting the root directory, and entering `VITE_API_URL`.
+
+**Redeploying after a code change:**
+- Push to `main`. Render redeploys the API when files under `backend/` change, and Vercel rebuilds the UI.
+- CI runs the backend and frontend checks on the same push.
+- If `VITE_API_URL` changes, redeploy in Vercel, because Vite bakes it in at build time.
+
+**Re-seeding the hosted database:**
+- With `DATABASE_URL` pointing at Supabase, run `cd backend && make seed`. It only adds missing data.
+- For a clean slate, first empty the data tables:
+  ```sql
+  TRUNCATE movement_entries, movements, stock_balances, products, locations RESTART IDENTITY CASCADE;
+  ```
+  then run `make seed`.
+- Free Supabase projects pause after about a week of inactivity. Restore the project from the Supabase dashboard; the data stays.
+
+**Also in the repo:**
+- `backend/Dockerfile`, `frontend/Dockerfile` and `docker-compose.yml` run the whole stack locally (section 5).
+- **CI** (`.github/workflows/ci.yml`) runs on every push and pull request:
   - **Backend job**, against a PostgreSQL 16 service container: checks that the schema snapshot and the generated sqlc code are current, runs `gofmt`, `go vet` and the OpenAPI lint, builds, applies the migrations, runs the tests with coverage, and runs the load test against a live server.
   - **Frontend job:** lint, type check, tests and production build.
-- **Migrate and seed** are `make migrate-up` and `make seed` (section 5). The seed is safe to rerun: it only adds what is missing.
-
-- **Hosting config:** `render.yaml` (Render blueprint for the API: Docker, `/healthz` health check, `APP_ENV=production`) and `frontend/vercel.json` (sends every path to the app, so deep links work).
-- **Cross-origin support:** the API allows the origins in `CORS_ALLOWED_ORIGIN` and exposes `X-Request-ID`.
-
-**Planned setup:**
-- **API:** Render, from `render.yaml`.
-- **UI:** Vercel, with root directory `frontend` and `VITE_API_URL` set to the API URL.
-- **Database:** Supabase.
-
-The live URLs, the exact dashboard steps and the redeploy flow will be added here once it's deployed.
-
-**Re-seeding a database** (for example after a free-tier database is reset): run `make migrate-up` and then `make seed` against it.
 
 ## 6. Running tests and coverage
 
@@ -354,12 +386,16 @@ Domain errors are separate Go types in `internal/domain/errors.go`. Every stock 
 | Rule violation or bad input | WARN | `request_id`, path, reason, plus the domain ids involved (`product_id`, `location_id`, `from_location_id`, `to_location_id`, `movement_id`, quantity) |
 | Unexpected error or panic | ERROR | `request_id`, path, and the real error. With `APP_ENV=production`, only the error kind (for a database error, its Postgres code and constraint name) |
 
-Request bodies, headers and secrets are never logged. **Where to see logs:** in the terminal running the API. There's no hosted instance yet, so there's no hosted log viewer (section 11).
+Request bodies, headers and secrets are never logged.
+
+**Where to see logs:**
+- **Hosted:** Render dashboard → `stock-ledger-api` → **Logs**, which is searchable, for example by a `request_id`. The hosted API runs with `APP_ENV=production`.
+- **Locally:** in the terminal running the API, or `docker compose logs -f api`.
 
 ## 10. Reviewer aids
 
 - **Test clock:** not applicable. No business rule depends on elapsed time (no due dates or expiry). The season forecast compares against the same calendar window last year, and the seed creates matching data dated a year back.
-- **Re-seed:** `make seed` adds whatever is missing and can be rerun. For a clean start, recreate the database, then run `make migrate-up` and `make seed`.
+- **Re-seed:** `make seed` adds whatever is missing and can be rerun. For a clean start, recreate the database (or empty the data tables), then run `make migrate-up` and `make seed`. The hosted steps are in section 5a.
 - **Seed data:**
   - 1 warehouse and 6 bins (A-01, A-02, B-01, B-02, COLD-01 and a manual-only DOCK).
   - 8 products (rice, wheat flour, sugar, toor dal, sunflower oil, salt, tea, ghee) with opening stock.
@@ -374,7 +410,8 @@ Request bodies, headers and secrets are never logged. **Where to see logs:** in 
 
 ## 11. Known limitations
 
-- **Not deployed yet:** there are no live URLs. The Dockerfiles, `docker-compose.yml`, `render.yaml`, `frontend/vercel.json` and CORS support are in place (section 5a).
+- **Free-tier hosting:** the API sleeps after about 15 minutes idle (30–60 second cold start), and the Supabase project pauses after about a week of inactivity.
+- **Hosted logs need dashboard access:** they're in the Render dashboard, which needs an account invitation. Screenshots or a live demo are the practical way to show them.
 - **No authentication;** `created_by` is free text.
 - **Batch or lot tracking with expiry** (a Stretch item) is not built. Stock take and the ledger CSV export are built.
 - **The Go code is checked only by `gofmt` and `go vet`,** with no stricter linter such as staticcheck. The frontend uses ESLint.
