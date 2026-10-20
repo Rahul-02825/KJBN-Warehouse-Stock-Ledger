@@ -13,7 +13,12 @@ import (
 type Querier interface {
 	// Same filters as ListMovementHistory, for the pagination total.
 	CountMovementHistory(ctx context.Context, arg CountMovementHistoryParams) (int64, error)
+	// Used only by cmd/seed to record fictional trading history with past dates.
+	// Normal postings always take created_at from NOW().
+	CountProductMovementsWithReference(ctx context.Context, arg CountProductMovementsWithReferenceParams) (int64, error)
 	CountProducts(ctx context.Context, search *string) (int64, error)
+	CreateBackdatedMovement(ctx context.Context, arg CreateBackdatedMovementParams) (Movement, error)
+	CreateBackdatedMovementEntry(ctx context.Context, arg CreateBackdatedMovementEntryParams) error
 	CreateLocation(ctx context.Context, arg CreateLocationParams) (Location, error)
 	CreateMovement(ctx context.Context, arg CreateMovementParams) (Movement, error)
 	CreateMovementEntry(ctx context.Context, arg CreateMovementEntryParams) (MovementEntry, error)

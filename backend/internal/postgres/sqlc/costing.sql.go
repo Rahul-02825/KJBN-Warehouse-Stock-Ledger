@@ -40,7 +40,7 @@ SELECT
      WHERE e.movement_id = m.id)::NUMERIC(18, 4) AS net_delta
 FROM movements m
 LEFT JOIN movements o ON o.id = m.reversal_of_id
-ORDER BY m.product_id, m.id
+ORDER BY m.product_id, m.created_at, m.id
 `
 
 type ListMovementsForCostCheckRow struct {
