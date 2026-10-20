@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,7 +16,8 @@ import (
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	logs := httpapi.NewLogBuffer()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(io.MultiWriter(os.Stdout, logs), nil)))
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -40,7 +42,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         ":" + port,
-		Handler:      httpapi.NewRouter(pool, config()),
+		Handler:      httpapi.NewRouter(pool, config(logs)),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}
@@ -63,12 +65,12 @@ func main() {
 	srv.Shutdown(ctx)
 }
 
-func config() httpapi.Config {
+func config(logs *httpapi.LogBuffer) httpapi.Config {
 	var origins []string
 	for _, origin := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGIN"), ",") {
 		if origin = strings.TrimSpace(origin); origin != "" {
 			origins = append(origins, origin)
 		}
 	}
-	return httpapi.Config{AllowedOrigins: origins, Production: os.Getenv("APP_ENV") == "production"}
+	return httpapi.Config{AllowedOrigins: origins, Production: os.Getenv("APP_ENV") == "production", Logs: logs}
 }

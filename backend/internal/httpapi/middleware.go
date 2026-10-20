@@ -29,6 +29,9 @@ func Logger(next http.Handler) http.Handler {
 
 		next.ServeHTTP(rec, r)
 
+		if isQuietPath(r.URL.Path) && rec.status < 400 {
+			return
+		}
 		slog.Info("request",
 			"request_id", id,
 			"method", r.Method,
@@ -54,4 +57,8 @@ func Recover(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isQuietPath(path string) bool {
+	return path == "/healthz" || path == "/api/logs"
 }

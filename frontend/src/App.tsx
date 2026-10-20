@@ -9,6 +9,7 @@ import { ProductDetail } from './pages/ProductDetail'
 import { Products } from './pages/Products'
 import { RecordMovement } from './pages/record/RecordMovement'
 import { CostCheck } from './pages/reports/CostCheck'
+import { Logs } from './pages/reports/Logs'
 import { LowStock } from './pages/reports/LowStock'
 import { Reconciliation } from './pages/reports/Reconciliation'
 import { SeasonForecast } from './pages/reports/SeasonForecast'
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="reports/reconciliation" element={<Reconciliation />} />
           <Route path="reports/cost-check" element={<CostCheck />} />
           <Route path="reports/season-forecast" element={<SeasonForecast />} />
+          <Route path="reports/logs" element={<Logs />} />
           {['receive', 'ship', 'transfer', 'adjust'].map((kind) => (
             <Route key={kind} path={kind} element={<RedirectToRecord kind={kind} />} />
           ))}

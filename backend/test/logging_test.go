@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -149,5 +150,66 @@ func TestCORS_AllowsOnlyTheConfiguredOrigin(t *testing.T) {
 	})
 	if preflight.Code != 204 || !strings.Contains(preflight.Header().Get("Access-Control-Allow-Headers"), "Idempotency-Key") {
 		t.Errorf("preflight = %d %v", preflight.Code, preflight.Header())
+	}
+}
+
+func TestLogBuffer_KeepsOnlyTheLast500Lines(t *testing.T) {
+	buf := httpapi.NewLogBuffer()
+	for i := 0; i < 510; i++ {
+		fmt.Fprintf(buf, "{\"n\":%d}\n", i)
+	}
+	lines := buf.Lines()
+	if len(lines) != 500 || string(lines[0]) != `{"n":10}` || string(lines[499]) != `{"n":509}` {
+		t.Fatalf("kept %d lines, first %s, last %s", len(lines), lines[0], lines[len(lines)-1])
+	}
+}
+
+func TestRecentLogs_FiltersByLevelAndRequestID(t *testing.T) {
+	buf := httpapi.NewLogBuffer()
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	h := httpapi.NewRouter(nil, httpapi.Config{Logs: buf})
+
+	rejected := sendRaw(h, "GET", "/api/movements?type=BAD", "", map[string]string{"X-Request-ID": "bad-id-1"})
+	if rejected.Code != 400 {
+		t.Fatalf("setup request: %d", rejected.Code)
+	}
+	sendRaw(h, "GET", "/api/movements?type=WRONG", "", map[string]string{"X-Request-ID": "bad-id-2"})
+
+	_, all := send(t, h, "GET", "/api/logs", "")
+	lines := all["data"].([]any)
+	if len(lines) != 4 || lines[0].(map[string]any)["request_id"] != "bad-id-2" {
+		t.Fatalf("want 4 lines newest first (2 requests x warning + request line), got %v", lines)
+	}
+
+	_, warnings := send(t, h, "GET", "/api/logs?level=WARN", "")
+	for _, l := range warnings["data"].([]any) {
+		if l.(map[string]any)["level"] != "WARN" {
+			t.Errorf("level=WARN returned %v", l)
+		}
+	}
+	if n := len(warnings["data"].([]any)); n != 2 {
+		t.Errorf("level=WARN returned %d lines, want 2", n)
+	}
+
+	_, one := send(t, h, "GET", "/api/logs?request_id=bad-id-1", "")
+	if n := len(one["data"].([]any)); n != 2 {
+		t.Errorf("request_id filter returned %d lines, want 2", n)
+	}
+
+	_, limited := send(t, h, "GET", "/api/logs?limit=1", "")
+	if n := len(limited["data"].([]any)); n != 1 {
+		t.Errorf("limit=1 returned %d lines", n)
+	}
+
+	if status, body := send(t, h, "GET", "/api/logs?level=LOUD", ""); status != 400 || errorCode(body) != "VALIDATION_ERROR" {
+		t.Errorf("bad level: %d %v", status, body)
+	}
+
+	for _, l := range lines {
+		if l.(map[string]any)["path"] == "/api/logs" {
+			t.Errorf("viewing the logs should not add log lines: %v", l)
+		}
 	}
 }

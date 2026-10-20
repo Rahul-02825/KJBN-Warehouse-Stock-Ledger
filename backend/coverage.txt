@@ -67,9 +67,14 @@ github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/loca
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/locations.go:133:	listLocations		77.8%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/locations.go:158:	getLocation		66.7%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/locations.go:172:	findLocation		100.0%
+github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/logbuffer.go:15:	NewLogBuffer		100.0%
+github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/logbuffer.go:19:	Write			100.0%
+github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/logbuffer.go:30:	Lines			100.0%
+github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/logs.go:13:		recentLogs		95.8%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/middleware.go:16:	WriteHeader		100.0%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/middleware.go:22:	Logger			100.0%
-github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/middleware.go:43:	Recover			88.9%
+github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/middleware.go:46:	Recover			88.9%
+github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/middleware.go:62:	isQuietPath		100.0%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/movements.go:66:	totalValue		75.0%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/movements.go:74:	toMovementJSON		100.0%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/movements.go:93:	toMovementDetailJSON	100.0%
@@ -107,7 +112,7 @@ github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/requ
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/requestid.go:22:	isSafeRequestID		100.0%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/requestid.go:36:	withRequestID		100.0%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/requestid.go:40:	requestID		100.0%
-github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/server.go:23:	NewRouter		100.0%
+github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/server.go:25:	NewRouter		100.0%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/warehouses.go:31:	listWarehouses		0.0%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/warehouses.go:53:	previewPlacement	77.8%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi/warehouses.go:67:	previewPick		77.8%
@@ -166,4 +171,4 @@ github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/ledger/valid
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/ledger/validate.go:45:	checkNote		75.0%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/ledger/validate.go:53:	result			100.0%
 github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/ledger/validate.go:60:	nilIfEmpty		100.0%
-total:												(statements)		87.1%
+total:												(statements)		87.4%

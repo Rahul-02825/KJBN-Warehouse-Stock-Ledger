@@ -24,7 +24,7 @@ tags:
   - name: Reports
     description: Low stock, valuation, reconciliation, cost check, activity, top movers, season forecast and product ledger.
   - name: Health
-    description: Liveness and database connectivity.
+    description: Liveness, database connectivity and recent logs.
 
 paths:
   /api/products:
@@ -510,6 +510,23 @@ paths:
         listed, largest gap value (gap x average cost) first.
       parameters:
         - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 180, default: 30 } }
+      responses:
+        '200': { $ref: '#/components/responses/Object' }
+        '400': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/logs:
+    get:
+      tags: [Health]
+      summary: The API's most recent log lines, newest first
+      description: |
+        The server keeps its last 500 structured log lines in memory (lost on restart) and returns
+        them here. Lines never contain request bodies, headers or secrets; with APP_ENV=production,
+        internal errors show only their kind. Successful /healthz and /api/logs requests are not logged.
+      parameters:
+        - { name: level, in: query, description: Minimum level, schema: { type: string, enum: [INFO, WARN, ERROR] } }
+        - { name: request_id, in: query, description: Only lines for this X-Request-ID, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
       responses:
         '200': { $ref: '#/components/responses/Object' }
         '400': { $ref: '#/components/responses/Error' }

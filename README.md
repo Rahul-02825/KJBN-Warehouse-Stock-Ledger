@@ -242,15 +242,15 @@ Use a different env file with `make <target> ENV_FILE=../.env.local`.
 
 | Package | Coverage |
 |---|---|
-| **Overall backend** (`domain` + `ledger` + `httpapi`) | **87.1%** |
+| **Overall backend** (`domain` + `ledger` + `httpapi`) | **87.4%** |
 | **Business rules** (`domain` + `ledger`) | **89.8%** |
 | `internal/domain` | 97.3% |
 | `internal/ledger` | 88.3% |
-| `internal/httpapi` | 84.6% |
+| `internal/httpapi` | 85.2% |
 
-**What is covered** (96 backend tests and 22 frontend tests):
+**What is covered** (98 backend tests and 23 frontend tests):
 - **Unit tests in `internal/domain`:** weighted average including 1,000-receipt rounding drift, backing a receipt out of the average, quantity, unit, reorder-level and reason validation, and the bin planner.
-- **API-level tests in `backend/test/`:** every movement type, every error code, all reports, CSV exports, idempotency, stock take, request-id logging, CORS, and production-safe error logs.
+- **API-level tests in `backend/test/`:** every movement type, every error code, all reports, CSV exports, idempotency, stock take, request-id logging, the recent-logs endpoint, CORS, and production-safe error logs.
 - **Every edge case named in the brief:** two OUTs racing for the last unit (25 rounds per run), a transfer whose destination write fails, concurrent and repeated reversals, IN with zero or negative cost (including the database constraint on its own), 120 real receipts checked for average drift, and reconciliation after a deliberately corrupted cache.
 - **After each movement test,** a check confirms the balance cache still matches the ledger.
 
@@ -297,6 +297,7 @@ All endpoints are under the same base URL. The full spec is in [`backend/interna
 | GET | `/api/reports/daily-activity` | Postings per day (`days`) | 400 |
 | GET | `/api/reports/top-movers` | Most-shipped products (`days`, `limit`) | 400 |
 | GET | `/api/reports/season-forecast` | Current stock against the same weeks last year (`days`) | 400 |
+| GET | `/api/logs` | The API's last 500 log lines, newest first (`level`, `request_id`, `limit`) | 400 |
 
 All POST movement endpoints accept an optional `Idempotency-Key` header. A retry with the same key returns the original movement with `200` and `Idempotent-Replayed: true`. A key reused for a different request gets `409 IDEMPOTENCY_KEY_REUSED`. Any endpoint can also return `500 INTERNAL`.
 
@@ -389,7 +390,12 @@ Domain errors are separate Go types in `internal/domain/errors.go`. Every stock 
 Request bodies, headers and secrets are never logged.
 
 **Where to see logs:**
-- **Hosted:** Render dashboard → `stock-ledger-api` → **Logs**, which is searchable, for example by a `request_id`. The hosted API runs with `APP_ENV=production`.
+- **In the app, for anyone:** Reports → **Logs** (`/reports/logs`), backed by `GET /api/logs`.
+  - The API keeps its last 500 log lines in memory and lists them newest first.
+  - Filter by level, or paste or click a `request_id` to see everything that happened to one request.
+  - The list resets when the server restarts or wakes from sleep.
+  - Successful health checks and log-page requests are not logged, so they don't crowd it out.
+- **Full history:** Render dashboard → `stock-ledger-api` → **Logs** (needs access to the Render account). The hosted API runs with `APP_ENV=production`.
 - **Locally:** in the terminal running the API, or `docker compose logs -f api`.
 
 ## 10. Reviewer aids
@@ -405,13 +411,13 @@ Request bodies, headers and secrets are never logged.
   - Concurrency: `cd backend && make load-test` fires concurrent requests at a running API. It writes data, so use a scratch database.
   - Corrupting the cache for reconciliation: `UPDATE stock_balances SET quantity = quantity + 1 WHERE product_id = 1 AND location_id = 1;` then open Reports → Reconciliation.
   - Each edge case from the brief has a named test (section 8).
-- **Correlating logs:** copy the `X-Request-ID` from a response (browser DevTools → Network) and search the logs for it.
+- **Correlating logs:** copy the `X-Request-ID` from a response (browser DevTools → Network), then paste it on Reports → Logs to see that request's lines.
 - **Backend walkthrough:** [`docs/backend-guide.md`](docs/backend-guide.md) explains the folders, one request traced end to end, each stock operation's locks and failure cases, and recipes for adding a rule or an endpoint.
 
 ## 11. Known limitations
 
 - **Free-tier hosting:** the API sleeps after about 15 minutes idle (30–60 second cold start), and the Supabase project pauses after about a week of inactivity.
-- **Hosted logs need dashboard access:** they're in the Render dashboard, which needs an account invitation. Screenshots or a live demo are the practical way to show them.
+- **The in-app Logs page holds only the last 500 lines in memory.** It's empty after a restart or a free-tier wake-up. The full history is in the Render dashboard, which needs account access.
 - **No authentication;** `created_by` is free text.
 - **Batch or lot tracking with expiry** (a Stretch item) is not built. Stock take and the ledger CSV export are built.
 - **The Go code is checked only by `gofmt` and `go vet`,** with no stricter linter such as staticcheck. The frontend uses ESLint.

@@ -12,17 +12,19 @@ import (
 type Config struct {
 	AllowedOrigins []string
 	Production     bool
+	Logs           *LogBuffer
 }
 
 type Server struct {
 	pool   *pgxpool.Pool
 	q      *sqlc.Queries
 	ledger *ledger.Ledger
+	logs   *LogBuffer
 }
 
 func NewRouter(pool *pgxpool.Pool, cfg Config) http.Handler {
 	hideErrorDetails = cfg.Production
-	s := &Server{pool: pool, q: sqlc.New(pool), ledger: ledger.New(pool)}
+	s := &Server{pool: pool, q: sqlc.New(pool), ledger: ledger.New(pool), logs: cfg.Logs}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", s.health)
@@ -65,6 +67,7 @@ func NewRouter(pool *pgxpool.Pool, cfg Config) http.Handler {
 	mux.HandleFunc("GET /api/reports/daily-activity", s.dailyActivityReport)
 	mux.HandleFunc("GET /api/reports/top-movers", s.topMoversReport)
 	mux.HandleFunc("GET /api/reports/season-forecast", s.seasonForecastReport)
+	mux.HandleFunc("GET /api/logs", s.recentLogs)
 
 	return Logger(Recover(CORS(cfg.AllowedOrigins, mux)))
 }

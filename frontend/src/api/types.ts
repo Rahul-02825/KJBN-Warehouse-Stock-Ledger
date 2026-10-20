@@ -233,3 +233,16 @@ export interface LocationBalances {
   location_code: string
   data: { product_id: number; sku: string; product_name: string; unit: Unit; quantity: Decimal; average_cost: Decimal; updated_at: string }[]
 }
+
+export interface LogLine {
+  time: string
+  level: string
+  msg: string
+  request_id?: string
+  [field: string]: unknown
+}
+
+export interface LogsResponse {
+  data: LogLine[]
+  capacity: number
+}
