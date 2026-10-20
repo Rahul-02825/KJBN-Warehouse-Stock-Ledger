@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/api"
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi"
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres"
 )
 
@@ -39,7 +39,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         ":" + port,
-		Handler:      api.NewRouter(pool),
+		Handler:      httpapi.NewRouter(pool),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}

@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/api"
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi"
 )
 
 // Integration tests for stock movements. Each test starts from an empty database with
@@ -18,7 +18,7 @@ import (
 func setupWarehouse(t *testing.T) (http.Handler, *pgxpool.Pool) {
 	t.Helper()
 	pool := testDB(t)
-	h := api.NewRouter(pool)
+	h := httpapi.NewRouter(pool)
 	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"RICE-25","name":"Rice 25 kg bag","unit":"pcs","reorder_level":"10"}`)
 	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"DAL","name":"Toor dal","unit":"kg"}`)
 	mustSend(t, h, 201, "POST", "/api/locations", `{"code":"A-01"}`)
