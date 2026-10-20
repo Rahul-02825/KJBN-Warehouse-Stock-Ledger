@@ -7,8 +7,9 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
 const countMovementHistory = `-- name: CountMovementHistory :one
@@ -30,12 +31,12 @@ WHERE ($1::BIGINT IS NULL
 `
 
 type CountMovementHistoryParams struct {
-	ProductID    pgtype.Int8        `json:"product_id"`
-	MovementType pgtype.Text        `json:"movement_type"`
-	LocationID   pgtype.Int8        `json:"location_id"`
-	Reference    pgtype.Text        `json:"reference"`
-	FromDate     pgtype.Timestamptz `json:"from_date"`
-	ToDate       pgtype.Timestamptz `json:"to_date"`
+	ProductID    *int64     `json:"product_id"`
+	MovementType *string    `json:"movement_type"`
+	LocationID   *int64     `json:"location_id"`
+	Reference    *string    `json:"reference"`
+	FromDate     *time.Time `json:"from_date"`
+	ToDate       *time.Time `json:"to_date"`
 }
 
 // Same filters as ListMovementHistory, for the pagination total.
@@ -75,18 +76,18 @@ RETURNING id, product_id, movement_type, from_location_id, to_location_id, quant
 `
 
 type CreateMovementParams struct {
-	ProductID      int64          `json:"product_id"`
-	MovementType   string         `json:"movement_type"`
-	FromLocationID pgtype.Int8    `json:"from_location_id"`
-	ToLocationID   pgtype.Int8    `json:"to_location_id"`
-	Quantity       pgtype.Numeric `json:"quantity"`
-	UnitCost       pgtype.Numeric `json:"unit_cost"`
-	Reference      string         `json:"reference"`
-	Reason         pgtype.Text    `json:"reason"`
-	Note           string         `json:"note"`
-	CreatedBy      string         `json:"created_by"`
-	ReversalOfID   pgtype.Int8    `json:"reversal_of_id"`
-	IdempotencyKey pgtype.Text    `json:"idempotency_key"`
+	ProductID      int64            `json:"product_id"`
+	MovementType   string           `json:"movement_type"`
+	FromLocationID *int64           `json:"from_location_id"`
+	ToLocationID   *int64           `json:"to_location_id"`
+	Quantity       decimal.Decimal  `json:"quantity"`
+	UnitCost       *decimal.Decimal `json:"unit_cost"`
+	Reference      string           `json:"reference"`
+	Reason         *string          `json:"reason"`
+	Note           string           `json:"note"`
+	CreatedBy      string           `json:"created_by"`
+	ReversalOfID   *int64           `json:"reversal_of_id"`
+	IdempotencyKey *string          `json:"idempotency_key"`
 }
 
 func (q *Queries) CreateMovement(ctx context.Context, arg CreateMovementParams) (Movement, error) {
@@ -137,11 +138,11 @@ RETURNING id, movement_id, product_id, location_id, quantity_delta, unit_cost, c
 `
 
 type CreateMovementEntryParams struct {
-	MovementID    int64          `json:"movement_id"`
-	ProductID     int64          `json:"product_id"`
-	LocationID    int64          `json:"location_id"`
-	QuantityDelta pgtype.Numeric `json:"quantity_delta"`
-	UnitCost      pgtype.Numeric `json:"unit_cost"`
+	MovementID    int64            `json:"movement_id"`
+	ProductID     int64            `json:"product_id"`
+	LocationID    int64            `json:"location_id"`
+	QuantityDelta decimal.Decimal  `json:"quantity_delta"`
+	UnitCost      *decimal.Decimal `json:"unit_cost"`
 }
 
 func (q *Queries) CreateMovementEntry(ctx context.Context, arg CreateMovementEntryParams) (MovementEntry, error) {
@@ -199,7 +200,7 @@ FROM movements
 WHERE idempotency_key = $1
 `
 
-func (q *Queries) GetMovementByIdempotencyKey(ctx context.Context, idempotencyKey pgtype.Text) (Movement, error) {
+func (q *Queries) GetMovementByIdempotencyKey(ctx context.Context, idempotencyKey *string) (Movement, error) {
 	row := q.db.QueryRow(ctx, getMovementByIdempotencyKey, idempotencyKey)
 	var i Movement
 	err := row.Scan(
@@ -240,27 +241,27 @@ WHERE m.id = $1
 `
 
 type GetMovementDetailRow struct {
-	ID               int64              `json:"id"`
-	ProductID        int64              `json:"product_id"`
-	MovementType     string             `json:"movement_type"`
-	FromLocationID   pgtype.Int8        `json:"from_location_id"`
-	ToLocationID     pgtype.Int8        `json:"to_location_id"`
-	Quantity         pgtype.Numeric     `json:"quantity"`
-	UnitCost         pgtype.Numeric     `json:"unit_cost"`
-	Reference        string             `json:"reference"`
-	Reason           pgtype.Text        `json:"reason"`
-	Note             string             `json:"note"`
-	CreatedBy        string             `json:"created_by"`
-	ReversalOfID     pgtype.Int8        `json:"reversal_of_id"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
-	Sku              string             `json:"sku"`
-	ProductName      string             `json:"product_name"`
-	Unit             string             `json:"unit"`
-	FromLocationCode pgtype.Text        `json:"from_location_code"`
-	ToLocationCode   pgtype.Text        `json:"to_location_code"`
-	ReversedByID     pgtype.Int8        `json:"reversed_by_id"`
-	IsReversed       bool               `json:"is_reversed"`
+	ID               int64            `json:"id"`
+	ProductID        int64            `json:"product_id"`
+	MovementType     string           `json:"movement_type"`
+	FromLocationID   *int64           `json:"from_location_id"`
+	ToLocationID     *int64           `json:"to_location_id"`
+	Quantity         decimal.Decimal  `json:"quantity"`
+	UnitCost         *decimal.Decimal `json:"unit_cost"`
+	Reference        string           `json:"reference"`
+	Reason           *string          `json:"reason"`
+	Note             string           `json:"note"`
+	CreatedBy        string           `json:"created_by"`
+	ReversalOfID     *int64           `json:"reversal_of_id"`
+	CreatedAt        time.Time        `json:"created_at"`
+	IdempotencyKey   *string          `json:"idempotency_key"`
+	Sku              string           `json:"sku"`
+	ProductName      string           `json:"product_name"`
+	Unit             string           `json:"unit"`
+	FromLocationCode *string          `json:"from_location_code"`
+	ToLocationCode   *string          `json:"to_location_code"`
+	ReversedByID     *int64           `json:"reversed_by_id"`
+	IsReversed       bool             `json:"is_reversed"`
 }
 
 // Single movement with display names and reversal status.
@@ -325,21 +326,21 @@ ORDER BY m.created_at, m.id, e.id
 `
 
 type GetProductLedgerRow struct {
-	EntryID                int64              `json:"entry_id"`
-	MovementID             int64              `json:"movement_id"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	MovementType           string             `json:"movement_type"`
-	Reference              string             `json:"reference"`
-	Reason                 pgtype.Text        `json:"reason"`
-	Note                   string             `json:"note"`
-	CreatedBy              string             `json:"created_by"`
-	ReversalOfID           pgtype.Int8        `json:"reversal_of_id"`
-	LocationID             int64              `json:"location_id"`
-	LocationCode           string             `json:"location_code"`
-	QuantityDelta          pgtype.Numeric     `json:"quantity_delta"`
-	UnitCost               pgtype.Numeric     `json:"unit_cost"`
-	RunningTotal           pgtype.Numeric     `json:"running_total"`
-	RunningLocationBalance pgtype.Numeric     `json:"running_location_balance"`
+	EntryID                int64            `json:"entry_id"`
+	MovementID             int64            `json:"movement_id"`
+	CreatedAt              time.Time        `json:"created_at"`
+	MovementType           string           `json:"movement_type"`
+	Reference              string           `json:"reference"`
+	Reason                 *string          `json:"reason"`
+	Note                   string           `json:"note"`
+	CreatedBy              string           `json:"created_by"`
+	ReversalOfID           *int64           `json:"reversal_of_id"`
+	LocationID             int64            `json:"location_id"`
+	LocationCode           string           `json:"location_code"`
+	QuantityDelta          decimal.Decimal  `json:"quantity_delta"`
+	UnitCost               *decimal.Decimal `json:"unit_cost"`
+	RunningTotal           decimal.Decimal  `json:"running_total"`
+	RunningLocationBalance decimal.Decimal  `json:"running_location_balance"`
 }
 
 // Product ledger view: every ledger entry for a product, oldest first, with
@@ -451,38 +452,38 @@ OFFSET $7
 `
 
 type ListMovementHistoryParams struct {
-	ProductID    pgtype.Int8        `json:"product_id"`
-	MovementType pgtype.Text        `json:"movement_type"`
-	LocationID   pgtype.Int8        `json:"location_id"`
-	Reference    pgtype.Text        `json:"reference"`
-	FromDate     pgtype.Timestamptz `json:"from_date"`
-	ToDate       pgtype.Timestamptz `json:"to_date"`
-	PageOffset   int32              `json:"page_offset"`
-	PageSize     int32              `json:"page_size"`
+	ProductID    *int64     `json:"product_id"`
+	MovementType *string    `json:"movement_type"`
+	LocationID   *int64     `json:"location_id"`
+	Reference    *string    `json:"reference"`
+	FromDate     *time.Time `json:"from_date"`
+	ToDate       *time.Time `json:"to_date"`
+	PageOffset   int32      `json:"page_offset"`
+	PageSize     int32      `json:"page_size"`
 }
 
 type ListMovementHistoryRow struct {
-	ID               int64              `json:"id"`
-	ProductID        int64              `json:"product_id"`
-	MovementType     string             `json:"movement_type"`
-	FromLocationID   pgtype.Int8        `json:"from_location_id"`
-	ToLocationID     pgtype.Int8        `json:"to_location_id"`
-	Quantity         pgtype.Numeric     `json:"quantity"`
-	UnitCost         pgtype.Numeric     `json:"unit_cost"`
-	Reference        string             `json:"reference"`
-	Reason           pgtype.Text        `json:"reason"`
-	Note             string             `json:"note"`
-	CreatedBy        string             `json:"created_by"`
-	ReversalOfID     pgtype.Int8        `json:"reversal_of_id"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
-	Sku              string             `json:"sku"`
-	ProductName      string             `json:"product_name"`
-	Unit             string             `json:"unit"`
-	FromLocationCode pgtype.Text        `json:"from_location_code"`
-	ToLocationCode   pgtype.Text        `json:"to_location_code"`
-	ReversedByID     pgtype.Int8        `json:"reversed_by_id"`
-	IsReversed       bool               `json:"is_reversed"`
+	ID               int64            `json:"id"`
+	ProductID        int64            `json:"product_id"`
+	MovementType     string           `json:"movement_type"`
+	FromLocationID   *int64           `json:"from_location_id"`
+	ToLocationID     *int64           `json:"to_location_id"`
+	Quantity         decimal.Decimal  `json:"quantity"`
+	UnitCost         *decimal.Decimal `json:"unit_cost"`
+	Reference        string           `json:"reference"`
+	Reason           *string          `json:"reason"`
+	Note             string           `json:"note"`
+	CreatedBy        string           `json:"created_by"`
+	ReversalOfID     *int64           `json:"reversal_of_id"`
+	CreatedAt        time.Time        `json:"created_at"`
+	IdempotencyKey   *string          `json:"idempotency_key"`
+	Sku              string           `json:"sku"`
+	ProductName      string           `json:"product_name"`
+	Unit             string           `json:"unit"`
+	FromLocationCode *string          `json:"from_location_code"`
+	ToLocationCode   *string          `json:"to_location_code"`
+	ReversedByID     *int64           `json:"reversed_by_id"`
+	IsReversed       bool             `json:"is_reversed"`
 }
 
 // History with optional filters and offset pagination.

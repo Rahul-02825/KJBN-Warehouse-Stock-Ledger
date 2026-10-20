@@ -1,4 +1,4 @@
-package api
+package httpapi
 
 import (
 	_ "embed"
@@ -8,7 +8,7 @@ import (
 // The spec is compiled into the binary, so the docs work wherever the API runs.
 //
 //go:embed openapi.yaml
-var openapiSpec []byte
+var openapiYAML []byte
 
 const swaggerPage = `<!doctype html>
 <html>
@@ -24,15 +24,12 @@ const swaggerPage = `<!doctype html>
 </body>
 </html>`
 
-type DocsHandler struct{}
+func (s *Server) openapiSpec(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/yaml")
+	w.Write(openapiYAML)
+}
 
-func (DocsHandler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/yaml")
-		w.Write(openapiSpec)
-	})
-	mux.HandleFunc("GET /api/docs", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(swaggerPage))
-	})
+func (s *Server) docsPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(swaggerPage))
 }

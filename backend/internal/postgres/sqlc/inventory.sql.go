@@ -7,8 +7,9 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
 const decreaseStockBalanceIfAvailable = `-- name: DecreaseStockBalanceIfAvailable :execrows
@@ -21,9 +22,9 @@ WHERE product_id = $2
 `
 
 type DecreaseStockBalanceIfAvailableParams struct {
-	Amount     pgtype.Numeric `json:"amount"`
-	ProductID  int64          `json:"product_id"`
-	LocationID int64          `json:"location_id"`
+	Amount     decimal.Decimal `json:"amount"`
+	ProductID  int64           `json:"product_id"`
+	LocationID int64           `json:"location_id"`
 }
 
 // Conditional decrement: zero rows affected means insufficient stock.
@@ -61,9 +62,9 @@ WHERE product_id = $1
 `
 
 // Total on hand for a product across all locations (cached).
-func (q *Queries) GetProductTotalQuantity(ctx context.Context, productID int64) (pgtype.Numeric, error) {
+func (q *Queries) GetProductTotalQuantity(ctx context.Context, productID int64) (decimal.Decimal, error) {
 	row := q.db.QueryRow(ctx, getProductTotalQuantity, productID)
-	var total_quantity pgtype.Numeric
+	var total_quantity decimal.Decimal
 	err := row.Scan(&total_quantity)
 	return total_quantity, err
 }
@@ -88,25 +89,25 @@ WHERE p.id = $1
 `
 
 type GetStockBalanceParams struct {
-	ID   int64 `json:"id"`
-	ID_2 int64 `json:"id_2"`
+	ProductID  int64 `json:"product_id"`
+	LocationID int64 `json:"location_id"`
 }
 
 type GetStockBalanceRow struct {
-	ProductID    int64          `json:"product_id"`
-	Sku          string         `json:"sku"`
-	ProductName  string         `json:"product_name"`
-	Unit         string         `json:"unit"`
-	LocationID   int64          `json:"location_id"`
-	LocationCode string         `json:"location_code"`
-	Quantity     pgtype.Numeric `json:"quantity"`
-	AverageCost  pgtype.Numeric `json:"average_cost"`
+	ProductID    int64           `json:"product_id"`
+	Sku          string          `json:"sku"`
+	ProductName  string          `json:"product_name"`
+	Unit         string          `json:"unit"`
+	LocationID   int64           `json:"location_id"`
+	LocationCode string          `json:"location_code"`
+	Quantity     decimal.Decimal `json:"quantity"`
+	AverageCost  decimal.Decimal `json:"average_cost"`
 }
 
 // Balance for one (product, location) cell. Returns a zero row when no
 // stock_balances row exists yet, as long as both product and location exist.
 func (q *Queries) GetStockBalance(ctx context.Context, arg GetStockBalanceParams) (GetStockBalanceRow, error) {
-	row := q.db.QueryRow(ctx, getStockBalance, arg.ID, arg.ID_2)
+	row := q.db.QueryRow(ctx, getStockBalance, arg.ProductID, arg.LocationID)
 	var i GetStockBalanceRow
 	err := row.Scan(
 		&i.ProductID,
@@ -130,9 +131,9 @@ WHERE product_id = $2
 `
 
 type IncreaseStockBalanceParams struct {
-	Amount     pgtype.Numeric `json:"amount"`
-	ProductID  int64          `json:"product_id"`
-	LocationID int64          `json:"location_id"`
+	Amount     decimal.Decimal `json:"amount"`
+	ProductID  int64           `json:"product_id"`
+	LocationID int64           `json:"location_id"`
 }
 
 func (q *Queries) IncreaseStockBalance(ctx context.Context, arg IncreaseStockBalanceParams) (int64, error) {
@@ -160,14 +161,14 @@ ORDER BY p.name, p.id
 `
 
 type ListLocationBalancesRow struct {
-	LocationID  int64              `json:"location_id"`
-	ProductID   int64              `json:"product_id"`
-	Sku         string             `json:"sku"`
-	ProductName string             `json:"product_name"`
-	Unit        string             `json:"unit"`
-	Quantity    pgtype.Numeric     `json:"quantity"`
-	AverageCost pgtype.Numeric     `json:"average_cost"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	LocationID  int64           `json:"location_id"`
+	ProductID   int64           `json:"product_id"`
+	Sku         string          `json:"sku"`
+	ProductName string          `json:"product_name"`
+	Unit        string          `json:"unit"`
+	Quantity    decimal.Decimal `json:"quantity"`
+	AverageCost decimal.Decimal `json:"average_cost"`
+	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 // Balances by location: one row per product that has (or had) stock in this bin.
@@ -214,11 +215,11 @@ ORDER BY l.code
 `
 
 type ListProductBalancesRow struct {
-	ProductID    int64              `json:"product_id"`
-	LocationID   int64              `json:"location_id"`
-	LocationCode string             `json:"location_code"`
-	Quantity     pgtype.Numeric     `json:"quantity"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ProductID    int64           `json:"product_id"`
+	LocationID   int64           `json:"location_id"`
+	LocationCode string          `json:"location_code"`
+	Quantity     decimal.Decimal `json:"quantity"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
 // Balances by product: one row per location that holds (or held) this product.
@@ -271,19 +272,19 @@ ORDER BY p.name, p.id, l.code
 `
 
 type ListStockAsOfParams struct {
-	AsOf       pgtype.Timestamptz `json:"as_of"`
-	ProductID  pgtype.Int8        `json:"product_id"`
-	LocationID pgtype.Int8        `json:"location_id"`
+	AsOf       time.Time `json:"as_of"`
+	ProductID  *int64    `json:"product_id"`
+	LocationID *int64    `json:"location_id"`
 }
 
 type ListStockAsOfRow struct {
-	ProductID    int64          `json:"product_id"`
-	Sku          string         `json:"sku"`
-	ProductName  string         `json:"product_name"`
-	Unit         string         `json:"unit"`
-	LocationID   int64          `json:"location_id"`
-	LocationCode string         `json:"location_code"`
-	Quantity     pgtype.Numeric `json:"quantity"`
+	ProductID    int64           `json:"product_id"`
+	Sku          string          `json:"sku"`
+	ProductName  string          `json:"product_name"`
+	Unit         string          `json:"unit"`
+	LocationID   int64           `json:"location_id"`
+	LocationCode string          `json:"location_code"`
+	Quantity     decimal.Decimal `json:"quantity"`
 }
 
 // Stock as it was at a point in time, rebuilt from the ledger.
@@ -336,15 +337,15 @@ ORDER BY p.name, p.id, l.code
 `
 
 type ListStockOverviewRow struct {
-	ProductID    int64          `json:"product_id"`
-	Sku          string         `json:"sku"`
-	ProductName  string         `json:"product_name"`
-	Unit         string         `json:"unit"`
-	ReorderLevel pgtype.Numeric `json:"reorder_level"`
-	LocationID   int64          `json:"location_id"`
-	LocationCode string         `json:"location_code"`
-	Quantity     pgtype.Numeric `json:"quantity"`
-	AverageCost  pgtype.Numeric `json:"average_cost"`
+	ProductID    int64           `json:"product_id"`
+	Sku          string          `json:"sku"`
+	ProductName  string          `json:"product_name"`
+	Unit         string          `json:"unit"`
+	ReorderLevel decimal.Decimal `json:"reorder_level"`
+	LocationID   int64           `json:"location_id"`
+	LocationCode string          `json:"location_code"`
+	Quantity     decimal.Decimal `json:"quantity"`
+	AverageCost  decimal.Decimal `json:"average_cost"`
 }
 
 // Full grid: every product x every location, zero where no balance row.
@@ -392,9 +393,9 @@ type LockStockBalanceParams struct {
 }
 
 type LockStockBalanceRow struct {
-	ProductID  int64          `json:"product_id"`
-	LocationID int64          `json:"location_id"`
-	Quantity   pgtype.Numeric `json:"quantity"`
+	ProductID  int64           `json:"product_id"`
+	LocationID int64           `json:"location_id"`
+	Quantity   decimal.Decimal `json:"quantity"`
 }
 
 func (q *Queries) LockStockBalance(ctx context.Context, arg LockStockBalanceParams) (LockStockBalanceRow, error) {

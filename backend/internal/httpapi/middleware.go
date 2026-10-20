@@ -1,4 +1,4 @@
-package api
+package httpapi
 
 import (
 	"log/slog"
@@ -40,7 +40,7 @@ func Recover(next http.Handler) http.Handler {
 		defer func() {
 			if err := recover(); err != nil {
 				slog.Error("panic", "error", err, "path", r.URL.Path)
-				writeError(w, http.StatusInternalServerError, "INTERNAL", "internal server error")
+				writeErrorBody(w, http.StatusInternalServerError, errorBody{Code: "INTERNAL", Message: "internal server error"})
 			}
 		}()
 		next.ServeHTTP(w, r)

@@ -1,6 +1,8 @@
+import { CircleAlert, CircleCheck, PackageOpen, TriangleAlert, type LucideIcon } from 'lucide-react'
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
 import { Link, type LinkProps } from 'react-router'
 import { ApiError } from '../api/client'
+import { icon } from './icon'
 
 export function Eyebrow({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
@@ -115,9 +117,10 @@ export function Spinner({ label = 'Loading…' }: { label?: string }) {
   )
 }
 
-export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
+export function EmptyState({ title, children, action, Icon = PackageOpen }: { title: string; children?: ReactNode; action?: ReactNode; Icon?: LucideIcon }) {
   return (
-    <div className="rounded-panel border border-dashed border-line px-6 py-12 text-center">
+    <div className="animate-rise rounded-panel border border-dashed border-line px-6 py-12 text-center">
+      <Icon size={28} strokeWidth={1.25} className="mx-auto mb-3 text-petrol-line" aria-hidden />
       <p className="font-serif text-xl">{title}</p>
       {children && <div className="mx-auto mt-2 max-w-md text-sm text-muted">{children}</div>}
       {action && <div className="mt-5">{action}</div>}
@@ -130,8 +133,9 @@ export function ErrorAlert({ error, onRetry }: { error: ApiError | Error | null;
   const code = error instanceof ApiError ? error.code : undefined
   const message = code === 'INTERNAL' ? 'The server hit an unexpected error. Check the API logs for details.' : error.message
   return (
-    <div className="mb-6 flex items-start justify-between gap-4 rounded-btn border border-danger/25 bg-danger-soft px-4 py-3 text-sm text-danger" role="alert">
-      <div>
+    <div className="mb-6 flex animate-rise items-start gap-3 rounded-btn border border-danger/25 bg-danger-soft px-4 py-3 text-sm text-danger" role="alert">
+      <CircleAlert {...icon} className="mt-0.5 shrink-0" />
+      <div className="flex-1">
         <p className="font-medium">{message}</p>
         {code && code !== 'NETWORK' && code !== 'INTERNAL' && <p className="code mt-0.5 opacity-80">{code}</p>}
       </div>
@@ -146,16 +150,18 @@ export function ErrorAlert({ error, onRetry }: { error: ApiError | Error | null;
 
 export function SuccessAlert({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-6 rounded-btn border border-success/25 bg-success-soft px-4 py-3 text-sm text-success" role="status">
-      {children}
+    <div className="mb-6 flex animate-rise items-start gap-3 rounded-btn border border-success/25 bg-success-soft px-4 py-3 text-sm text-success" role="status">
+      <CircleCheck {...icon} className="mt-0.5 shrink-0" />
+      <div>{children}</div>
     </div>
   )
 }
 
 export function Notice({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-btn border border-saffron/40 bg-saffron-soft px-4 py-3 text-sm text-ink" role="alert">
-      {children}
+    <div className="flex animate-rise items-start gap-3 rounded-btn border border-saffron/40 bg-saffron-soft px-4 py-3 text-sm text-ink" role="alert">
+      <TriangleAlert {...icon} className="mt-0.5 shrink-0 text-saffron-ink" />
+      <div>{children}</div>
     </div>
   )
 }

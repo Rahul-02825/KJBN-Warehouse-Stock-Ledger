@@ -9,9 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/api"
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi"
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres"
 )
 
 func main() {
@@ -27,7 +26,7 @@ func main() {
 		port = "8080"
 	}
 
-	pool, err := pgxpool.New(context.Background(), dbURL)
+	pool, err := postgres.Connect(context.Background(), dbURL)
 	if err != nil {
 		slog.Error("database config", "error", err.Error())
 		os.Exit(1)
@@ -40,7 +39,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         ":" + port,
-		Handler:      api.NewRouter(pool),
+		Handler:      httpapi.NewRouter(pool),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}

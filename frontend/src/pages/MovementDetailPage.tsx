@@ -1,3 +1,5 @@
+import { ArrowLeft } from 'lucide-react'
+import { icon } from '../components/icon'
 import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
 import type { ListResponse, Location, MovementDetail } from '../api/types'
@@ -27,7 +29,8 @@ export function MovementDetailPage() {
 
   return (
     <>
-      <Link to="/movements" className="link text-sm">
+      <Link to="/movements" className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors duration-200 hover:text-ink">
+        <ArrowLeft {...icon} />
         Movement history
       </Link>
       <header className="mb-8 mt-6">

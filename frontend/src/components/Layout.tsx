@@ -1,5 +1,7 @@
+import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
+import { icon } from './icon'
 import { ButtonLink } from './ui'
 
 const destinations = [
@@ -38,6 +40,7 @@ export function Layout() {
           <div className="ml-auto flex items-center gap-4">
             <div className="hidden sm:block">
               <ButtonLink to="/record/receive" className="px-4 py-2">
+                <Plus {...icon} />
                 Record movement
               </ButtonLink>
             </div>
@@ -65,6 +68,7 @@ export function Layout() {
               </Link>
             ))}
             <ButtonLink to="/record/receive" className="mt-4 w-full" onClick={() => setOpen(false)}>
+              <Plus {...icon} />
               Record movement
             </ButtonLink>
           </nav>

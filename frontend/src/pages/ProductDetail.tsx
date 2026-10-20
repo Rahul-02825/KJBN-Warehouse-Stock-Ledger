@@ -1,5 +1,9 @@
+import { ArrowLeft } from 'lucide-react'
+import { icon } from '../components/icon'
+import { movementIcons } from '../lib/navigation'
 import { Link, useParams } from 'react-router'
 import type { ListResponse, LowStockRow, Product, ProductBalances, ProductLedger } from '../api/types'
+import { CsvLink } from '../components/CsvLink'
 import { Delta, MovementBadge } from '../components/MovementBadge'
 import { Row, Table, Td } from '../components/Table'
 import { ButtonLink, EmptyState, ErrorAlert, Eyebrow, Spinner, Stat } from '../components/ui'
@@ -31,7 +35,8 @@ export function ProductDetail() {
 
   return (
     <>
-      <Link to="/products" className="link text-sm">
+      <Link to="/products" className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors duration-200 hover:text-ink">
+        <ArrowLeft {...icon} />
         Products
       </Link>
       <header className="mb-10 mt-6 flex flex-wrap items-end justify-between gap-6">
@@ -41,14 +46,20 @@ export function ProductDetail() {
           <p className="mt-3 text-[15.5px] text-muted">Counted in {p.unit}. Every number on this page is explained by the ledger below.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <ButtonLink to={`/record/receive?product=${p.id}`}>Receive</ButtonLink>
+          <ButtonLink to={`/record/receive?product=${p.id}`}>
+            <movementIcons.receive {...icon} />
+            Receive
+          </ButtonLink>
           <ButtonLink to={`/record/ship?product=${p.id}`} variant="ghost">
+            <movementIcons.ship {...icon} />
             Ship
           </ButtonLink>
           <ButtonLink to={`/record/transfer?product=${p.id}`} variant="ghost">
+            <movementIcons.transfer {...icon} />
             Transfer
           </ButtonLink>
           <ButtonLink to={`/record/adjust?product=${p.id}`} variant="ghost">
+            <movementIcons.adjust {...icon} />
             Adjust
           </ButtonLink>
         </div>
@@ -78,8 +89,13 @@ export function ProductDetail() {
       </section>
 
       <section>
-        <h2 className="mb-1 font-serif text-[clamp(22px,2.6vw,30px)] leading-tight">Ledger</h2>
-        <p className="mb-4 text-sm text-muted">Oldest first. Each row is one change; the balances show what was left right after it.</p>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="mb-1 font-serif text-[clamp(22px,2.6vw,30px)] leading-tight">Ledger</h2>
+            <p className="text-sm text-muted">Oldest first. Each row is one change; the balances show what was left right after it.</p>
+          </div>
+          {ledger.data.data.length > 0 && <CsvLink path={`/api/products/${p.id}/ledger?format=csv`} />}
+        </div>
         {ledger.data.data.length === 0 ? (
           <EmptyState title="No movements yet" action={<ButtonLink to={`/record/receive?product=${p.id}`}>Receive stock</ButtonLink>}>
             The ledger starts with the first receipt.

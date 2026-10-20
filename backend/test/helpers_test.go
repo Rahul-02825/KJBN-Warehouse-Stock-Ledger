@@ -11,7 +11,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/api"
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi"
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres"
 )
 
 // send makes a request to the handler and returns the status code and decoded JSON body.
@@ -35,13 +36,13 @@ func errorCode(body map[string]any) string {
 
 // routerWithoutDB is enough for requests that are rejected before any query runs.
 func routerWithoutDB() http.Handler {
-	return api.NewRouter(nil)
+	return httpapi.NewRouter(nil)
 }
 
 // routerWithDB returns the full router on an emptied test database.
 func routerWithDB(t *testing.T) http.Handler {
 	t.Helper()
-	return api.NewRouter(testDB(t))
+	return httpapi.NewRouter(testDB(t))
 }
 
 // testDB connects to TEST_DATABASE_URL and empties all tables first.
@@ -56,7 +57,7 @@ func testDB(t *testing.T) *pgxpool.Pool {
 		t.Fatal("TEST_DATABASE_URL points at Supabase; tests delete all data, use a local database")
 	}
 
-	pool, err := pgxpool.New(context.Background(), url)
+	pool, err := postgres.Connect(context.Background(), url)
 	if err != nil {
 		t.Fatal(err)
 	}
