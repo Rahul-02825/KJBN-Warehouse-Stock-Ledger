@@ -12,49 +12,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-const countProductMovementsWithReference = `-- name: CountProductMovementsWithReference :one
-
-SELECT COUNT(*)
-FROM movements
-WHERE product_id = $1
-  AND reference = $2
-`
-
-type CountProductMovementsWithReferenceParams struct {
-	ProductID int64  `json:"product_id"`
-	Reference string `json:"reference"`
-}
-
-// Used only by cmd/seed to record fictional trading history with past dates.
-// Normal postings always take created_at from NOW().
-func (q *Queries) CountProductMovementsWithReference(ctx context.Context, arg CountProductMovementsWithReferenceParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countProductMovementsWithReference, arg.ProductID, arg.Reference)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countProductReceiptsExcludingReference = `-- name: CountProductReceiptsExcludingReference :one
-SELECT COUNT(*)
-FROM movements
-WHERE product_id = $1
-  AND movement_type = 'IN'
-  AND reference <> $2
-`
-
-type CountProductReceiptsExcludingReferenceParams struct {
-	ProductID int64  `json:"product_id"`
-	Reference string `json:"reference"`
-}
-
-func (q *Queries) CountProductReceiptsExcludingReference(ctx context.Context, arg CountProductReceiptsExcludingReferenceParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countProductReceiptsExcludingReference, arg.ProductID, arg.Reference)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const createBackdatedMovement = `-- name: CreateBackdatedMovement :one
+
 INSERT INTO movements (
     product_id,
     movement_type,
@@ -82,6 +41,8 @@ type CreateBackdatedMovementParams struct {
 	CreatedAt      time.Time        `json:"created_at"`
 }
 
+// Used only by cmd/seed to record a few fictional movements with past dates.
+// Normal postings always take created_at from NOW().
 func (q *Queries) CreateBackdatedMovement(ctx context.Context, arg CreateBackdatedMovementParams) (Movement, error) {
 	row := q.db.QueryRow(ctx, createBackdatedMovement,
 		arg.ProductID,

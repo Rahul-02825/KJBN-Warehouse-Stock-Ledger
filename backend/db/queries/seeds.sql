@@ -1,11 +1,5 @@
--- Used only by cmd/seed to record fictional trading history with past dates.
+-- Used only by cmd/seed to record a few fictional movements with past dates.
 -- Normal postings always take created_at from NOW().
-
--- name: CountProductMovementsWithReference :one
-SELECT COUNT(*)
-FROM movements
-WHERE product_id = $1
-  AND reference = $2;
 
 -- name: CreateBackdatedMovement :one
 INSERT INTO movements (
@@ -32,10 +26,3 @@ INSERT INTO movement_entries (
     created_at
 )
 VALUES ($1, $2, $3, $4, $5, $6);
-
--- name: CountProductReceiptsExcludingReference :one
-SELECT COUNT(*)
-FROM movements
-WHERE product_id = $1
-  AND movement_type = 'IN'
-  AND reference <> $2;
