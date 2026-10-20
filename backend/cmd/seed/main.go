@@ -36,16 +36,13 @@ type opening struct {
 	quantity      string
 }
 
-type pastSales struct {
-	sku, location string
-	weekly        string
-	unitCost      string
+type pastMovement struct {
+	sku, location   string
+	movementType    string
+	quantity        string
+	unitCost        string
+	daysFromYearAgo int
 }
-
-const (
-	pastReceipt = "Past receipt"
-	pastSale    = "Past sale"
-)
 
 var products = []product{
 	{"RICE-25", "Rice 25 kg bag", "pcs", "10", "1100.00"},
@@ -89,10 +86,11 @@ var openings = []opening{
 	{"GHEE-1", "COLD-01", "22"},
 }
 
-var history = []pastSales{
-	{"RICE-25", "A-01", "30", "1050.00"},
-	{"DAL-TOOR", "A-02", "60", "135.00"},
-	{"OIL-SUN", "B-01", "70", "122.00"},
+var lastYear = []pastMovement{
+	{"RICE-25", "A-01", "IN", "150", "1050.00", -5},
+	{"RICE-25", "A-01", "OUT", "150", "1050.00", 20},
+	{"DAL-TOOR", "A-02", "IN", "250", "135.00", -5},
+	{"DAL-TOOR", "A-02", "OUT", "250", "135.00", 20},
 }
 
 func main() {
@@ -170,14 +168,17 @@ func run(ctx context.Context, pool *pgxpool.Pool) error {
 		costs[p.sku] = p.unitCost
 	}
 
-	historyStart := time.Now().AddDate(-1, 0, -7)
-	pastMovements := 0
-	for _, h := range history {
-		n, err := postHistory(ctx, q, prodIDs[h.sku], locIDs[h.location], h, historyStart)
-		if err != nil {
-			return fmt.Errorf("history %s: %w", h.sku, err)
+	yearAgo := time.Now().AddDate(-1, 0, 0)
+	pastPosted := 0
+	for _, m := range lastYear {
+		if !fresh[m.sku] {
+			continue
 		}
-		pastMovements += n
+		at := yearAgo.AddDate(0, 0, m.daysFromYearAgo)
+		if err := postPast(ctx, q, prodIDs[m.sku], locIDs[m.location], m, at); err != nil {
+			return fmt.Errorf("last year %s %s: %w", m.movementType, m.sku, err)
+		}
+		pastPosted++
 	}
 
 	posted := 0
@@ -194,7 +195,7 @@ func run(ctx context.Context, pool *pgxpool.Pool) error {
 	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
-	fmt.Printf("seed: %d new locations, %d new products, %d opening movements, %d past movements\n", newLocs, len(fresh), posted, pastMovements)
+	fmt.Printf("seed: %d new locations, %d new products, %d opening movements, %d last-year movements\n", newLocs, len(fresh), posted, pastPosted)
 	return nil
 }
 
@@ -232,62 +233,20 @@ func postOpening(ctx context.Context, q *sqlc.Queries, productID, locationID int
 	return err
 }
 
-func postHistory(ctx context.Context, q *sqlc.Queries, productID, locationID int64, h pastSales, start time.Time) (int, error) {
-	done, err := q.CountProductMovementsWithReference(ctx, sqlc.CountProductMovementsWithReferenceParams{
-		ProductID: productID,
-		Reference: pastReceipt,
-	})
-	if err != nil {
-		return 0, err
-	}
-	cost := decimal.RequireFromString(h.unitCost)
-	if done > 0 {
-		return 0, keepHistoryAverage(ctx, q, productID, cost)
-	}
-
-	weekly := decimal.RequireFromString(h.weekly)
-	posted := 0
-	for month := 0; month < 12; month++ {
-		receivedAt := start.AddDate(0, month, 0)
-		if err := postPast(ctx, q, "IN", productID, locationID, weekly.Mul(decimal.NewFromInt(4)), cost, pastReceipt, receivedAt); err != nil {
-			return 0, err
-		}
-		posted++
-		for week := 0; week < 4; week++ {
-			soldAt := receivedAt.AddDate(0, 0, 2+7*week)
-			if err := postPast(ctx, q, "OUT", productID, locationID, weekly, cost, pastSale, soldAt); err != nil {
-				return 0, err
-			}
-			posted++
-		}
-	}
-	return posted, keepHistoryAverage(ctx, q, productID, cost)
-}
-
-func keepHistoryAverage(ctx context.Context, q *sqlc.Queries, productID int64, cost decimal.Decimal) error {
-	receipts, err := q.CountProductReceiptsExcludingReference(ctx, sqlc.CountProductReceiptsExcludingReferenceParams{
-		ProductID: productID,
-		Reference: pastReceipt,
-	})
-	if err != nil || receipts > 0 {
-		return err
-	}
-	_, err = q.UpdateProductAverageCost(ctx, sqlc.UpdateProductAverageCostParams{ID: productID, AverageCost: cost})
-	return err
-}
-
-func postPast(ctx context.Context, q *sqlc.Queries, movementType string, productID, locationID int64, quantity, cost decimal.Decimal, reference string, at time.Time) error {
+func postPast(ctx context.Context, q *sqlc.Queries, productID, locationID int64, m pastMovement, at time.Time) error {
+	quantity := decimal.RequireFromString(m.quantity)
+	cost := decimal.RequireFromString(m.unitCost)
 	row := sqlc.CreateBackdatedMovementParams{
 		ProductID:    productID,
-		MovementType: movementType,
+		MovementType: m.movementType,
 		Quantity:     quantity,
 		UnitCost:     &cost,
-		Reference:    reference,
+		Reference:    "Last year",
 		CreatedBy:    createdBy,
 		CreatedAt:    at,
 	}
 	delta := quantity
-	if movementType == "IN" {
+	if m.movementType == "IN" {
 		row.ToLocationID = &locationID
 	} else {
 		row.FromLocationID = &locationID
