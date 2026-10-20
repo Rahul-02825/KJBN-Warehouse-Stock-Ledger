@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/api"
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres"
 )
 
 // send makes a request to the handler and returns the status code and decoded JSON body.
@@ -56,7 +57,7 @@ func testDB(t *testing.T) *pgxpool.Pool {
 		t.Fatal("TEST_DATABASE_URL points at Supabase; tests delete all data, use a local database")
 	}
 
-	pool, err := pgxpool.New(context.Background(), url)
+	pool, err := postgres.Connect(context.Background(), url)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,7 +7,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 
@@ -51,22 +50,22 @@ func (l *Ledger) PostIn(ctx context.Context, req InRequest) (m sqlc.Movement, er
 		if err != nil {
 			return err
 		}
-		newAvg := domain.WeightedAverage(toDecimal(oldQty), toDecimal(product.AverageCost), req.Quantity, req.UnitCost)
+		newAvg := domain.WeightedAverage(oldQty, product.AverageCost, req.Quantity, req.UnitCost)
 
 		m, err = applyChanges(ctx, q, product, sqlc.CreateMovementParams{
 			ProductID:      product.ID,
 			MovementType:   "IN",
-			ToLocationID:   optID(startID),
-			Quantity:       toNumeric(req.Quantity),
-			UnitCost:       toNumeric(req.UnitCost),
+			ToLocationID:   &startID,
+			Quantity:       req.Quantity,
+			UnitCost:       &req.UnitCost,
 			Reference:      req.Reference,
 			CreatedBy:      req.CreatedBy,
-			IdempotencyKey: optText(req.IdempotencyKey),
+			IdempotencyKey: nilIfEmpty(req.IdempotencyKey),
 		}, changes)
 		if err != nil {
 			return err
 		}
-		_, err = q.UpdateProductAverageCost(ctx, sqlc.UpdateProductAverageCostParams{ID: product.ID, AverageCost: toNumeric(newAvg)})
+		_, err = q.UpdateProductAverageCost(ctx, sqlc.UpdateProductAverageCostParams{ID: product.ID, AverageCost: newAvg})
 		return err
 	})
 	return m, err
@@ -90,12 +89,12 @@ func (l *Ledger) PostOut(ctx context.Context, req OutRequest) (m sqlc.Movement, 
 		m, err = applyChanges(ctx, q, product, sqlc.CreateMovementParams{
 			ProductID:      product.ID,
 			MovementType:   "OUT",
-			FromLocationID: optID(plan.Allocations[0].Bin.ID),
-			Quantity:       toNumeric(req.Quantity),
-			UnitCost:       product.AverageCost,
+			FromLocationID: &plan.Allocations[0].Bin.ID,
+			Quantity:       req.Quantity,
+			UnitCost:       &product.AverageCost,
 			Reference:      req.Reference,
 			CreatedBy:      req.CreatedBy,
-			IdempotencyKey: optText(req.IdempotencyKey),
+			IdempotencyKey: nilIfEmpty(req.IdempotencyKey),
 		}, plan.pickChanges())
 		return err
 	})
@@ -117,13 +116,13 @@ func (l *Ledger) PostTransfer(ctx context.Context, req TransferRequest) (m sqlc.
 		m, err = applyChanges(ctx, q, product, sqlc.CreateMovementParams{
 			ProductID:      product.ID,
 			MovementType:   "TRANSFER",
-			FromLocationID: optID(from.ID),
-			ToLocationID:   optID(to.ID),
-			Quantity:       toNumeric(req.Quantity),
-			UnitCost:       product.AverageCost,
+			FromLocationID: &from.ID,
+			ToLocationID:   &to.ID,
+			Quantity:       req.Quantity,
+			UnitCost:       &product.AverageCost,
 			Reference:      req.Reference,
 			CreatedBy:      req.CreatedBy,
-			IdempotencyKey: optText(req.IdempotencyKey),
+			IdempotencyKey: nilIfEmpty(req.IdempotencyKey),
 		}, []change{{from.ID, req.Quantity.Neg()}, {to.ID, req.Quantity}})
 		return err
 	})
@@ -139,7 +138,7 @@ func (l *Ledger) PostAdjustment(ctx context.Context, req AdjustmentRequest) (m s
 			return err
 		}
 		row := adjustmentRow(product, location.ID, req.Quantity, req.Reason, req.Note, req.Reference, req.CreatedBy)
-		row.IdempotencyKey = optText(req.IdempotencyKey)
+		row.IdempotencyKey = nilIfEmpty(req.IdempotencyKey)
 		m, err = applyChanges(ctx, q, product, row, []change{{location.ID, req.Quantity}})
 		return err
 	})
@@ -150,17 +149,17 @@ func adjustmentRow(product sqlc.Product, locationID int64, signed decimal.Decima
 	row := sqlc.CreateMovementParams{
 		ProductID:    product.ID,
 		MovementType: "ADJUSTMENT",
-		Quantity:     toNumeric(signed.Abs()),
-		UnitCost:     product.AverageCost,
-		Reason:       pgtype.Text{String: reason, Valid: true},
+		Quantity:     signed.Abs(),
+		UnitCost:     &product.AverageCost,
+		Reason:       &reason,
 		Note:         note,
 		Reference:    reference,
 		CreatedBy:    createdBy,
 	}
 	if signed.IsPositive() {
-		row.ToLocationID = optID(locationID)
+		row.ToLocationID = &locationID
 	} else {
-		row.FromLocationID = optID(locationID)
+		row.FromLocationID = &locationID
 	}
 	return row
 }
@@ -176,13 +175,13 @@ func (l *Ledger) PostReversal(ctx context.Context, movementID int64, req Reverse
 		if err != nil {
 			return err
 		}
-		if err := checkKey(ctx, q, req.IdempotencyKey); err != nil {
+		if err := checkKey(ctx, q, nilIfEmpty(req.IdempotencyKey)); err != nil {
 			return err
 		}
 		if err := domain.CheckReversible(original.MovementType); err != nil {
 			return err
 		}
-		_, err = q.GetReversalForMovement(ctx, optID(original.ID))
+		_, err = q.GetReversalForMovement(ctx, &original.ID)
 		if err == nil {
 			return domain.ErrAlreadyReversed
 		}
@@ -200,7 +199,7 @@ func (l *Ledger) PostReversal(ctx context.Context, movementID int64, req Reverse
 		}
 		var changes []change
 		for _, e := range entries {
-			changes = append(changes, change{e.LocationID, toDecimal(e.QuantityDelta).Neg()})
+			changes = append(changes, change{e.LocationID, e.QuantityDelta.Neg()})
 		}
 
 		m, err = applyChanges(ctx, q, product, sqlc.CreateMovementParams{
@@ -213,8 +212,8 @@ func (l *Ledger) PostReversal(ctx context.Context, movementID int64, req Reverse
 			Reference:      fmt.Sprintf("Reversal of movement #%d", original.ID),
 			Note:           req.Note,
 			CreatedBy:      req.CreatedBy,
-			ReversalOfID:   optID(original.ID),
-			IdempotencyKey: optText(req.IdempotencyKey),
+			ReversalOfID:   &original.ID,
+			IdempotencyKey: nilIfEmpty(req.IdempotencyKey),
 		}, changes)
 		if isUniqueViolation(err) {
 			return domain.ErrAlreadyReversed
@@ -236,7 +235,7 @@ func (l *Ledger) PostReversal(ctx context.Context, movementID int64, req Reverse
 // The product is already locked, so a retry with the same key waits here and
 // then finds the first posting.
 func applyChanges(ctx context.Context, q *sqlc.Queries, product sqlc.Product, row sqlc.CreateMovementParams, changes []change) (sqlc.Movement, error) {
-	if err := checkKey(ctx, q, row.IdempotencyKey.String); err != nil {
+	if err := checkKey(ctx, q, row.IdempotencyKey); err != nil {
 		return sqlc.Movement{}, err
 	}
 	if err := ensureSpace(ctx, q, product, changes); err != nil {
@@ -266,7 +265,7 @@ func applyChanges(ctx context.Context, q *sqlc.Queries, product sqlc.Product, ro
 			MovementID:    m.ID,
 			ProductID:     m.ProductID,
 			LocationID:    c.locationID,
-			QuantityDelta: toNumeric(c.delta),
+			QuantityDelta: c.delta,
 			UnitCost:      row.UnitCost,
 		})
 		if err != nil {
@@ -283,12 +282,12 @@ func backOutReceipt(ctx context.Context, q *sqlc.Queries, product sqlc.Product, 
 	if err != nil {
 		return err
 	}
-	newAvg, ok := domain.BackOutAverage(toDecimal(remainingNum), toDecimal(product.AverageCost),
-		toDecimal(receipt.Quantity), toDecimal(receipt.UnitCost))
+	newAvg, ok := domain.BackOutAverage(remainingNum, product.AverageCost,
+		receipt.Quantity, *receipt.UnitCost)
 	if !ok {
 		return domain.NotReversibleError{Reason: "stock valued from this receipt has already been used; post an adjustment instead"}
 	}
-	_, err = q.UpdateProductAverageCost(ctx, sqlc.UpdateProductAverageCostParams{ID: product.ID, AverageCost: toNumeric(newAvg)})
+	_, err = q.UpdateProductAverageCost(ctx, sqlc.UpdateProductAverageCostParams{ID: product.ID, AverageCost: newAvg})
 	return err
 }
 
@@ -359,7 +358,7 @@ func addStock(ctx context.Context, q *sqlc.Queries, productID, locationID int64,
 		return err
 	}
 	_, err = q.IncreaseStockBalance(ctx, sqlc.IncreaseStockBalanceParams{
-		Amount: toNumeric(qty), ProductID: productID, LocationID: locationID,
+		Amount: qty, ProductID: productID, LocationID: locationID,
 	})
 	return err
 }
@@ -367,7 +366,7 @@ func addStock(ctx context.Context, q *sqlc.Queries, productID, locationID int64,
 // takeStock decreases a balance only if enough stock is there.
 func takeStock(ctx context.Context, q *sqlc.Queries, productID, locationID int64, qty decimal.Decimal) error {
 	n, err := q.DecreaseStockBalanceIfAvailable(ctx, sqlc.DecreaseStockBalanceIfAvailableParams{
-		Amount: toNumeric(qty), ProductID: productID, LocationID: locationID,
+		Amount: qty, ProductID: productID, LocationID: locationID,
 	})
 	if err != nil {
 		return err
@@ -375,19 +374,19 @@ func takeStock(ctx context.Context, q *sqlc.Queries, productID, locationID int64
 	if n == 1 {
 		return nil
 	}
-	bal, err := q.GetStockBalance(ctx, sqlc.GetStockBalanceParams{ID: productID, ID_2: locationID})
+	bal, err := q.GetStockBalance(ctx, sqlc.GetStockBalanceParams{ProductID: productID, LocationID: locationID})
 	if err != nil {
 		return err
 	}
-	return domain.InsufficientStockError{Location: bal.LocationCode, Available: toDecimal(bal.Quantity), Requested: qty}
+	return domain.InsufficientStockError{Location: bal.LocationCode, Available: bal.Quantity, Requested: qty}
 }
 
 // checkKey returns errReplay when a movement with this idempotency key already exists.
-func checkKey(ctx context.Context, q *sqlc.Queries, key string) error {
-	if key == "" {
+func checkKey(ctx context.Context, q *sqlc.Queries, key *string) error {
+	if key == nil {
 		return nil
 	}
-	_, err := q.GetMovementByIdempotencyKey(ctx, optText(key))
+	_, err := q.GetMovementByIdempotencyKey(ctx, key)
 	if err == nil {
 		return errReplay
 	}
@@ -396,10 +395,6 @@ func checkKey(ctx context.Context, q *sqlc.Queries, key string) error {
 	}
 	return err
 }
-
-func optID(v int64) pgtype.Int8 { return pgtype.Int8{Int64: v, Valid: true} }
-
-func optText(s string) pgtype.Text { return pgtype.Text{String: s, Valid: s != ""} }
 
 func constraintName(err error) string {
 	var pgErr *pgconn.PgError

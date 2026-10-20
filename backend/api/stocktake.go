@@ -82,11 +82,11 @@ func (l *Ledger) PostStockTake(ctx context.Context, req StockTakeRequest) (resul
 			if err != nil {
 				return err
 			}
-			balance, err := q.GetStockBalance(ctx, sqlc.GetStockBalanceParams{ID: product.ID, ID_2: location.ID})
+			balance, err := q.GetStockBalance(ctx, sqlc.GetStockBalanceParams{ProductID: product.ID, LocationID: location.ID})
 			if err != nil {
 				return err
 			}
-			difference := c.Counted.Sub(toDecimal(balance.Quantity))
+			difference := c.Counted.Sub(balance.Quantity)
 			if difference.IsZero() {
 				result.Unchanged++
 				continue

@@ -7,8 +7,9 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
 const createLocation = `-- name: CreateLocation :one
@@ -18,13 +19,13 @@ RETURNING id, code, description, created_at, warehouse_id, x, y, capacity, auto_
 `
 
 type CreateLocationParams struct {
-	Code        string      `json:"code"`
-	Description string      `json:"description"`
-	WarehouseID int64       `json:"warehouse_id"`
-	X           float64     `json:"x"`
-	Y           float64     `json:"y"`
-	Capacity    pgtype.Int8 `json:"capacity"`
-	AutoPlace   bool        `json:"auto_place"`
+	Code        string  `json:"code"`
+	Description string  `json:"description"`
+	WarehouseID int64   `json:"warehouse_id"`
+	X           float64 `json:"x"`
+	Y           float64 `json:"y"`
+	Capacity    *int64  `json:"capacity"`
+	AutoPlace   bool    `json:"auto_place"`
 }
 
 func (q *Queries) CreateLocation(ctx context.Context, arg CreateLocationParams) (Location, error) {
@@ -109,16 +110,16 @@ ORDER BY l.code
 `
 
 type ListLocationsRow struct {
-	ID          int64              `json:"id"`
-	Code        string             `json:"code"`
-	Description string             `json:"description"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	WarehouseID int64              `json:"warehouse_id"`
-	X           float64            `json:"x"`
-	Y           float64            `json:"y"`
-	Capacity    pgtype.Int8        `json:"capacity"`
-	AutoPlace   bool               `json:"auto_place"`
-	Used        pgtype.Numeric     `json:"used"`
+	ID          int64           `json:"id"`
+	Code        string          `json:"code"`
+	Description string          `json:"description"`
+	CreatedAt   time.Time       `json:"created_at"`
+	WarehouseID int64           `json:"warehouse_id"`
+	X           float64         `json:"x"`
+	Y           float64         `json:"y"`
+	Capacity    *int64          `json:"capacity"`
+	AutoPlace   bool            `json:"auto_place"`
+	Used        decimal.Decimal `json:"used"`
 }
 
 func (q *Queries) ListLocations(ctx context.Context) ([]ListLocationsRow, error) {
@@ -159,11 +160,11 @@ WHERE id = $1
 `
 
 type SetLocationLayoutParams struct {
-	ID        int64       `json:"id"`
-	X         float64     `json:"x"`
-	Y         float64     `json:"y"`
-	Capacity  pgtype.Int8 `json:"capacity"`
-	AutoPlace bool        `json:"auto_place"`
+	ID        int64   `json:"id"`
+	X         float64 `json:"x"`
+	Y         float64 `json:"y"`
+	Capacity  *int64  `json:"capacity"`
+	AutoPlace bool    `json:"auto_place"`
 }
 
 func (q *Queries) SetLocationLayout(ctx context.Context, arg SetLocationLayoutParams) error {

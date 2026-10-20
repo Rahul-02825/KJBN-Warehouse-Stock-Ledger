@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
@@ -219,7 +218,7 @@ func (h *MovementHandler) reverse(w http.ResponseWriter, r *http.Request) {
 	req.IdempotencyKey = key
 	m, err := h.ledger.PostReversal(r.Context(), id, req)
 	h.respond(w, r, key, m, err, func(o sqlc.Movement) bool {
-		return o.MovementType == "REVERSAL" && o.ReversalOfID.Int64 == id
+		return o.MovementType == "REVERSAL" && o.ReversalOfID != nil && *o.ReversalOfID == id
 	})
 }
 
@@ -246,7 +245,7 @@ func (h *MovementHandler) get(w http.ResponseWriter, r *http.Request) {
 	resp := toDetailResponse(d)
 	for _, e := range entries {
 		resp.Entries = append(resp.Entries, entryResponse{
-			LocationID: e.LocationID, QuantityDelta: toDecimal(e.QuantityDelta), UnitCost: numPtr(e.UnitCost),
+			LocationID: e.LocationID, QuantityDelta: e.QuantityDelta, UnitCost: e.UnitCost,
 		})
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -265,13 +264,13 @@ func (h *MovementHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	if t := strings.ToUpper(query.Get("type")); t != "" {
 		if domain.ValidMovementType(t) {
-			f.MovementType = pgtype.Text{String: t, Valid: true}
+			f.MovementType = &t
 		} else {
 			fields["type"] = domain.MovementTypesMessage()
 		}
 	}
 	if ref := strings.TrimSpace(query.Get("reference")); ref != "" {
-		f.Reference = pgtype.Text{String: ref, Valid: true}
+		f.Reference = &ref
 	}
 	if !valid(w, fields) {
 		return
@@ -349,7 +348,7 @@ func readKey(w http.ResponseWriter, r *http.Request) (string, bool) {
 // original movement with 200, provided the key was used for the same kind of request.
 func (h *MovementHandler) respond(w http.ResponseWriter, r *http.Request, key string, m sqlc.Movement, err error, sameRequest func(sqlc.Movement) bool) {
 	if errors.Is(err, errReplay) {
-		original, err := h.q.GetMovementByIdempotencyKey(r.Context(), optText(key))
+		original, err := h.q.GetMovementByIdempotencyKey(r.Context(), &key)
 		if err != nil {
 			writeInternalError(w, err)
 			return
@@ -446,21 +445,21 @@ type entryResponse struct {
 }
 
 func toMovementResponse(m sqlc.Movement) movementResponse {
-	qty := toDecimal(m.Quantity)
+	qty := m.Quantity
 	resp := movementResponse{
 		ID:                 m.ID,
 		Type:               m.MovementType,
 		ProductID:          m.ProductID,
-		FromLocationID:     idPtr(m.FromLocationID),
-		ToLocationID:       idPtr(m.ToLocationID),
+		FromLocationID:     m.FromLocationID,
+		ToLocationID:       m.ToLocationID,
 		Quantity:           qty,
-		UnitCost:           numPtr(m.UnitCost),
+		UnitCost:           m.UnitCost,
 		Reference:          m.Reference,
-		Reason:             textPtr(m.Reason),
+		Reason:             m.Reason,
 		Note:               m.Note,
 		CreatedBy:          m.CreatedBy,
-		ReversesMovementID: idPtr(m.ReversalOfID),
-		CreatedAt:          m.CreatedAt.Time.UTC(),
+		ReversesMovementID: m.ReversalOfID,
+		CreatedAt:          m.CreatedAt.UTC(),
 	}
 	if resp.UnitCost != nil {
 		total := qty.Mul(*resp.UnitCost).Round(4)
@@ -481,10 +480,10 @@ func toDetailResponse(d sqlc.GetMovementDetailRow) movementDetailResponse {
 		SKU:              d.Sku,
 		ProductName:      d.ProductName,
 		Unit:             d.Unit,
-		FromLocationCode: textPtr(d.FromLocationCode),
-		ToLocationCode:   textPtr(d.ToLocationCode),
+		FromLocationCode: d.FromLocationCode,
+		ToLocationCode:   d.ToLocationCode,
 		IsReversed:       d.IsReversed,
-		ReversedByID:     idPtr(d.ReversedByID),
+		ReversedByID:     d.ReversedByID,
 	}
 }
 

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
@@ -59,9 +58,9 @@ func (h *ReportHandler) lowStock(w http.ResponseWriter, r *http.Request) {
 			SKU:           p.Sku,
 			Name:          p.Name,
 			Unit:          p.Unit,
-			ReorderLevel:  toDecimal(p.ReorderLevel),
-			TotalQuantity: toDecimal(p.TotalQuantity),
-			Shortfall:     toDecimal(p.Shortfall),
+			ReorderLevel:  p.ReorderLevel,
+			TotalQuantity: p.TotalQuantity,
+			Shortfall:     p.Shortfall,
 		}
 	}
 	if r.URL.Query().Get("format") == "csv" {
@@ -101,9 +100,9 @@ func (h *ReportHandler) valuation(w http.ResponseWriter, r *http.Request) {
 			SKU:           p.Sku,
 			Name:          p.Name,
 			Unit:          p.Unit,
-			TotalQuantity: toDecimal(p.TotalQuantity),
-			AverageCost:   toDecimal(p.AverageCost),
-			TotalValue:    toDecimal(p.TotalValue),
+			TotalQuantity: p.TotalQuantity,
+			AverageCost:   p.AverageCost,
+			TotalValue:    p.TotalValue,
 		}
 		total = total.Add(data[i].TotalValue)
 	}
@@ -147,9 +146,9 @@ func (h *ReportHandler) reconciliation(w http.ResponseWriter, r *http.Request) {
 			SKU:            c.Sku,
 			LocationID:     c.LocationID,
 			LocationCode:   c.LocationCode,
-			CachedQuantity: toDecimal(c.CachedQuantity),
-			LedgerQuantity: toDecimal(c.LedgerQuantity),
-			Difference:     toDecimal(c.Difference),
+			CachedQuantity: c.CachedQuantity,
+			LedgerQuantity: c.LedgerQuantity,
+			Difference:     c.Difference,
 		}
 		if !data[i].Difference.IsZero() {
 			driftCount++
@@ -199,17 +198,17 @@ func (h *ReportHandler) ledger(w http.ResponseWriter, r *http.Request) {
 	for i, e := range rows {
 		data[i] = ledgerRow{
 			MovementID:      e.MovementID,
-			CreatedAt:       e.CreatedAt.Time.UTC(),
+			CreatedAt:       e.CreatedAt.UTC(),
 			Type:            e.MovementType,
 			Reference:       e.Reference,
-			Reason:          textPtr(e.Reason),
+			Reason:          e.Reason,
 			CreatedBy:       e.CreatedBy,
 			LocationID:      e.LocationID,
 			LocationCode:    e.LocationCode,
-			QuantityDelta:   toDecimal(e.QuantityDelta),
-			UnitCost:        numPtr(e.UnitCost),
-			RunningTotal:    toDecimal(e.RunningTotal),
-			RunningLocation: toDecimal(e.RunningLocationBalance),
+			QuantityDelta:   e.QuantityDelta,
+			UnitCost:        e.UnitCost,
+			RunningTotal:    e.RunningTotal,
+			RunningLocation: e.RunningLocationBalance,
 		}
 	}
 	if r.URL.Query().Get("format") == "csv" {
@@ -267,23 +266,23 @@ func (h *ReportHandler) costCheck(w http.ResponseWriter, r *http.Request) {
 	avg := map[int64]decimal.Decimal{}
 	for _, m := range movements {
 		id := m.ProductID
-		amount := toDecimal(m.Quantity)
+		amount := m.Quantity
 		switch {
 		case m.MovementType == "IN":
-			avg[id] = domain.WeightedAverage(qty[id], avg[id], amount, toDecimal(m.UnitCost))
+			avg[id] = domain.WeightedAverage(qty[id], avg[id], amount, *m.UnitCost)
 			qty[id] = qty[id].Add(amount)
 		case m.MovementType == "REVERSAL" && m.ReversedType == "IN":
 			qty[id] = qty[id].Sub(amount)
-			avg[id], _ = domain.BackOutAverage(qty[id], avg[id], amount, toDecimal(m.UnitCost))
+			avg[id], _ = domain.BackOutAverage(qty[id], avg[id], amount, *m.UnitCost)
 		default: // OUT, TRANSFER, ADJUSTMENT and other reversals change stock, not the average
-			qty[id] = qty[id].Add(toDecimal(m.NetDelta))
+			qty[id] = qty[id].Add(m.NetDelta)
 		}
 	}
 
 	mismatches := 0
 	data := make([]costCheckRow, len(products))
 	for i, p := range products {
-		stored := toDecimal(p.AverageCost)
+		stored := p.AverageCost
 		data[i] = costCheckRow{
 			ProductID:         p.ID,
 			SKU:               p.Sku,
@@ -326,14 +325,14 @@ func (h *ReportHandler) dailyActivity(w http.ResponseWriter, r *http.Request) {
 	data := make([]activityRow, len(rows))
 	for i, d := range rows {
 		data[i] = activityRow{
-			Day:             d.Day.Time.Format("2006-01-02"),
+			Day:             d.Day.Format("2006-01-02"),
 			InCount:         d.InCount,
 			OutCount:        d.OutCount,
 			TransferCount:   d.TransferCount,
 			AdjustmentCount: d.AdjustmentCount,
 			ReversalCount:   d.ReversalCount,
-			InValue:         toDecimal(d.InValue),
-			OutValue:        toDecimal(d.OutValue),
+			InValue:         d.InValue,
+			OutValue:        d.OutValue,
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})
@@ -361,7 +360,7 @@ func (h *ReportHandler) topMovers(w http.ResponseWriter, r *http.Request) {
 	since := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, ist).AddDate(0, 0, -(days - 1))
 
 	rows, err := h.q.ListTopMovers(r.Context(), sqlc.ListTopMoversParams{
-		Since:   pgtype.Timestamptz{Time: since, Valid: true},
+		Since:   since,
 		MaxRows: int32(limit),
 	})
 	if err != nil {
@@ -376,8 +375,8 @@ func (h *ReportHandler) topMovers(w http.ResponseWriter, r *http.Request) {
 			Name:            p.Name,
 			Unit:            p.Unit,
 			Shipments:       p.Shipments,
-			ShippedQuantity: toDecimal(p.ShippedQuantity),
-			ShippedValue:    toDecimal(p.ShippedValue),
+			ShippedQuantity: p.ShippedQuantity,
+			ShippedValue:    p.ShippedValue,
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data, "since": since})
@@ -407,8 +406,8 @@ func (h *ReportHandler) seasonForecast(w http.ResponseWriter, r *http.Request) {
 	end := start.AddDate(0, 0, days)
 
 	rows, err := h.q.ListSeasonForecast(r.Context(), sqlc.ListSeasonForecastParams{
-		WindowStart: pgtype.Timestamptz{Time: start, Valid: true},
-		WindowEnd:   pgtype.Timestamptz{Time: end, Valid: true},
+		WindowStart: start,
+		WindowEnd:   end,
 	})
 	if err != nil {
 		writeInternalError(w, err)
@@ -421,11 +420,11 @@ func (h *ReportHandler) seasonForecast(w http.ResponseWriter, r *http.Request) {
 			SKU:            p.Sku,
 			Name:           p.Name,
 			Unit:           p.Unit,
-			LastYearDemand: toDecimal(p.LastYearDemand),
-			CurrentStock:   toDecimal(p.CurrentStock),
-			Gap:            toDecimal(p.Gap),
-			AverageCost:    toDecimal(p.AverageCost),
-			GapValue:       toDecimal(p.GapValue),
+			LastYearDemand: p.LastYearDemand,
+			CurrentStock:   p.CurrentStock,
+			Gap:            p.Gap,
+			AverageCost:    p.AverageCost,
+			GapValue:       p.GapValue,
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

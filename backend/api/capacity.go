@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
@@ -74,19 +73,19 @@ func loadBins(ctx context.Context, q *sqlc.Queries, warehouseID, productID int64
 			Code:            r.Code,
 			Position:        domain.Point{X: r.X, Y: r.Y},
 			Capacity:        capacityUnits(r.Capacity),
-			Used:            domain.ToUnits(toDecimal(r.Used)),
-			ProductQuantity: domain.ToUnits(toDecimal(r.ProductQuantity)),
+			Used:            domain.ToUnits(r.Used),
+			ProductQuantity: domain.ToUnits(r.ProductQuantity),
 			AutoPlace:       r.AutoPlace,
 		}
 	}
 	return bins, nil
 }
 
-func capacityUnits(capacity pgtype.Int8) *int64 {
-	if !capacity.Valid {
+func capacityUnits(capacity *int64) *int64 {
+	if capacity == nil {
 		return nil
 	}
-	units := capacity.Int64 * domain.UnitScale
+	units := *capacity * domain.UnitScale
 	return &units
 }
 
@@ -120,14 +119,14 @@ func startingBin(bins []domain.Bin, warehouse sqlc.Warehouse, locationID, step i
 }
 
 func warehouseFree(warehouse sqlc.Warehouse, bins []domain.Bin) int64 {
-	if !warehouse.Capacity.Valid {
+	if warehouse.Capacity == nil {
 		return domain.Bin{}.Free()
 	}
 	var used int64
 	for _, b := range bins {
 		used += b.Used
 	}
-	return max(warehouse.Capacity.Int64*domain.UnitScale-used, 0)
+	return max(*warehouse.Capacity*domain.UnitScale-used, 0)
 }
 
 func ensureSpace(ctx context.Context, q *sqlc.Queries, product sqlc.Product, changes []change) error {
