@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
@@ -80,10 +81,10 @@ func (h *ProductHandler) create(w http.ResponseWriter, r *http.Request) {
 	if req.Name == "" || len(req.Name) > 200 {
 		fields["name"] = "is required, max 200 characters"
 	}
-	if !ValidUnit(req.Unit) {
-		fields["unit"] = "must be one of pcs, kg, litre"
+	if !domain.ValidUnit(req.Unit) {
+		fields["unit"] = domain.UnitsMessage()
 	}
-	if msg := CheckReorderLevel(req.ReorderLevel, req.Unit); msg != "" {
+	if msg := domain.CheckReorderLevel(req.ReorderLevel, req.Unit); msg != "" {
 		fields["reorder_level"] = msg
 	}
 	if len(fields) > 0 {
@@ -193,7 +194,7 @@ func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request) {
 		params.Name = pgtype.Text{String: name, Valid: true}
 	}
 	if req.ReorderLevel != nil {
-		if msg := CheckReorderLevel(*req.ReorderLevel, current.Unit); msg != "" {
+		if msg := domain.CheckReorderLevel(*req.ReorderLevel, current.Unit); msg != "" {
 			fields["reorder_level"] = msg
 		}
 		params.ReorderLevel = toNumeric(*req.ReorderLevel)
@@ -209,23 +210,6 @@ func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toProductResponse(product))
-}
-
-func ValidUnit(u string) bool {
-	return u == "pcs" || u == "kg" || u == "litre"
-}
-
-func CheckReorderLevel(d decimal.Decimal, unit string) string {
-	if d.IsNegative() {
-		return "must not be negative"
-	}
-	if !d.Equal(d.Round(4)) {
-		return "must have at most 4 decimal places"
-	}
-	if unit == "pcs" && !d.Equal(d.Truncate(0)) {
-		return "must be a whole number for pcs"
-	}
-	return ""
 }
 
 func readID(w http.ResponseWriter, r *http.Request) (int64, bool) {

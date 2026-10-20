@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
@@ -19,76 +20,8 @@ import (
 // weighted-average calculation always see a consistent state. Conditional
 // balance updates are a second guard against negative stock.
 
-var maxAmount = decimal.New(1, 9) // 1,000,000,000
-
-var adjustmentReasons = map[string]bool{
-	"damaged": true, "expired": true, "count_correction": true, "theft": true, "other": true,
-}
-
-type validationError map[string]string
-
-func (e validationError) Error() string { return "validation failed" }
-
-type notFoundError struct{ what string }
-
-func (e notFoundError) Error() string { return e.what + " not found" }
-
-type insufficientStockError struct {
-	location  string
-	available decimal.Decimal
-	requested decimal.Decimal
-}
-
-func (e insufficientStockError) Error() string {
-	return fmt.Sprintf("insufficient stock at %s: available %s, requested %s", e.location, e.available, e.requested)
-}
-
-type notReversibleError struct{ reason string }
-
-func (e notReversibleError) Error() string { return e.reason }
-
-var errAlreadyReversed = errors.New("movement has already been reversed")
-
 // errReplay means the Idempotency-Key was already used; the handler returns the original movement.
 var errReplay = errors.New("idempotency key already used")
-
-// WeightedAverage returns the new average cost after receiving qty at cost.
-func WeightedAverage(oldQty, oldAvg, qty, cost decimal.Decimal) decimal.Decimal {
-	if !oldQty.IsPositive() {
-		return cost.Round(4)
-	}
-	totalValue := oldQty.Mul(oldAvg).Add(qty.Mul(cost))
-	return totalValue.Div(oldQty.Add(qty)).Round(4)
-}
-
-// ValidateQuantity checks a positive amount: quantity or cost.
-func ValidateQuantity(d decimal.Decimal) string {
-	switch {
-	case !d.IsPositive():
-		return "must be greater than zero"
-	case !d.Equal(d.Round(4)):
-		return "must have at most 4 decimal places"
-	case d.GreaterThan(maxAmount):
-		return "must not exceed 1000000000"
-	}
-	return ""
-}
-
-// BackOutAverage removes a reversed receipt (qty at cost) from the average.
-// remaining is the stock left after the receipt's quantity was taken out.
-// It returns false when the receipt's value has already been shipped out.
-func BackOutAverage(remaining, avg, qty, cost decimal.Decimal) (decimal.Decimal, bool) {
-	if !remaining.IsPositive() {
-		return avg, true // nothing left; keep the last average
-	}
-	value := remaining.Add(qty).Mul(avg).Sub(qty.Mul(cost))
-	if value.IsNegative() {
-		return avg, false
-	}
-	return value.Div(remaining).Round(4), true
-}
-
-func ValidReason(r string) bool { return adjustmentReasons[r] }
 
 type Ledger struct {
 	pool *pgxpool.Pool
@@ -118,7 +51,7 @@ func (l *Ledger) PostIn(ctx context.Context, req InRequest) (m sqlc.Movement, er
 		if err != nil {
 			return err
 		}
-		newAvg := WeightedAverage(toDecimal(oldQty), toDecimal(product.AverageCost), req.Quantity, req.UnitCost)
+		newAvg := domain.WeightedAverage(toDecimal(oldQty), toDecimal(product.AverageCost), req.Quantity, req.UnitCost)
 
 		m, err = applyChanges(ctx, q, product, sqlc.CreateMovementParams{
 			ProductID:      product.ID,
@@ -238,7 +171,7 @@ func (l *Ledger) PostReversal(ctx context.Context, movementID int64, req Reverse
 	err = l.inTx(ctx, func(q *sqlc.Queries) error {
 		original, err := q.LockMovementForReversal(ctx, movementID)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return notFoundError{"movement"}
+			return domain.NotFoundError{What: "movement"}
 		}
 		if err != nil {
 			return err
@@ -246,12 +179,12 @@ func (l *Ledger) PostReversal(ctx context.Context, movementID int64, req Reverse
 		if err := checkKey(ctx, q, req.IdempotencyKey); err != nil {
 			return err
 		}
-		if original.MovementType == "REVERSAL" {
-			return notReversibleError{"a reversal cannot itself be reversed"}
+		if err := domain.CheckReversible(original.MovementType); err != nil {
+			return err
 		}
 		_, err = q.GetReversalForMovement(ctx, optID(original.ID))
 		if err == nil {
-			return errAlreadyReversed
+			return domain.ErrAlreadyReversed
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
@@ -284,7 +217,7 @@ func (l *Ledger) PostReversal(ctx context.Context, movementID int64, req Reverse
 			IdempotencyKey: optText(req.IdempotencyKey),
 		}, changes)
 		if isUniqueViolation(err) {
-			return errAlreadyReversed
+			return domain.ErrAlreadyReversed
 		}
 		if err != nil {
 			return err
@@ -350,10 +283,10 @@ func backOutReceipt(ctx context.Context, q *sqlc.Queries, product sqlc.Product, 
 	if err != nil {
 		return err
 	}
-	newAvg, ok := BackOutAverage(toDecimal(remainingNum), toDecimal(product.AverageCost),
+	newAvg, ok := domain.BackOutAverage(toDecimal(remainingNum), toDecimal(product.AverageCost),
 		toDecimal(receipt.Quantity), toDecimal(receipt.UnitCost))
 	if !ok {
-		return notReversibleError{"stock valued from this receipt has already been used; post an adjustment instead"}
+		return domain.NotReversibleError{Reason: "stock valued from this receipt has already been used; post an adjustment instead"}
 	}
 	_, err = q.UpdateProductAverageCost(ctx, sqlc.UpdateProductAverageCostParams{ID: product.ID, AverageCost: toNumeric(newAvg)})
 	return err
@@ -389,13 +322,13 @@ func loadProductAndLocation(ctx context.Context, q *sqlc.Queries, productID, loc
 func lockProduct(ctx context.Context, q *sqlc.Queries, productID int64, qty decimal.Decimal) (sqlc.Product, error) {
 	product, err := q.LockProductForCostUpdate(ctx, productID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return sqlc.Product{}, notFoundError{"product"}
+		return sqlc.Product{}, domain.NotFoundError{What: "product"}
 	}
 	if err != nil {
 		return sqlc.Product{}, err
 	}
-	if product.Unit == "pcs" && !qty.Equal(qty.Truncate(0)) {
-		return sqlc.Product{}, validationError{"quantity": "must be a whole number for pcs"}
+	if msg := domain.CheckWholeQuantity(qty, product.Unit); msg != "" {
+		return sqlc.Product{}, domain.ValidationError{"quantity": msg}
 	}
 	return product, nil
 }
@@ -415,7 +348,7 @@ func receiptChanges(ctx context.Context, q *sqlc.Queries, product sqlc.Product, 
 func getLocation(ctx context.Context, q *sqlc.Queries, id int64) (sqlc.Location, error) {
 	location, err := q.GetLocationByID(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return sqlc.Location{}, notFoundError{"location"}
+		return sqlc.Location{}, domain.NotFoundError{What: "location"}
 	}
 	return location, err
 }
@@ -446,7 +379,7 @@ func takeStock(ctx context.Context, q *sqlc.Queries, productID, locationID int64
 	if err != nil {
 		return err
 	}
-	return insufficientStockError{location: bal.LocationCode, available: toDecimal(bal.Quantity), requested: qty}
+	return domain.InsufficientStockError{Location: bal.LocationCode, Available: toDecimal(bal.Quantity), Requested: qty}
 }
 
 // checkKey returns errReplay when a movement with this idempotency key already exists.

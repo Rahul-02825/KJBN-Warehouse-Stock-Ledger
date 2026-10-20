@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
@@ -120,7 +121,7 @@ func (h *WarehouseHandler) preview(w http.ResponseWriter, r *http.Request, plan 
 		allocations[i] = allocationResponse{
 			LocationID: a.Bin.ID,
 			Code:       a.Bin.Code,
-			Quantity:   fromUnits(a.Quantity),
+			Quantity:   domain.FromUnits(a.Quantity),
 			DistanceM:  math.Round(a.Distance*100) / 100,
 		}
 	}

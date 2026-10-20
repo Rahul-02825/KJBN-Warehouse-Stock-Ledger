@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
@@ -269,11 +270,11 @@ func (h *ReportHandler) costCheck(w http.ResponseWriter, r *http.Request) {
 		amount := toDecimal(m.Quantity)
 		switch {
 		case m.MovementType == "IN":
-			avg[id] = WeightedAverage(qty[id], avg[id], amount, toDecimal(m.UnitCost))
+			avg[id] = domain.WeightedAverage(qty[id], avg[id], amount, toDecimal(m.UnitCost))
 			qty[id] = qty[id].Add(amount)
 		case m.MovementType == "REVERSAL" && m.ReversedType == "IN":
 			qty[id] = qty[id].Sub(amount)
-			avg[id], _ = BackOutAverage(qty[id], avg[id], amount, toDecimal(m.UnitCost))
+			avg[id], _ = domain.BackOutAverage(qty[id], avg[id], amount, toDecimal(m.UnitCost))
 		default: // OUT, TRANSFER, ADJUSTMENT and other reversals change stock, not the average
 			qty[id] = qty[id].Add(toDecimal(m.NetDelta))
 		}

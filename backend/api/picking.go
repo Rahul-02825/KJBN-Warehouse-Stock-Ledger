@@ -6,6 +6,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
@@ -15,47 +16,47 @@ func planPick(ctx context.Context, q *sqlc.Queries, warehouse sqlc.Warehouse, pr
 		return binPlan{}, err
 	}
 	sources := stockedBins(bins)
-	quantity := toUnits(amount)
-	step := placementStep(product.Unit)
+	quantity := domain.ToUnits(amount)
+	step := domain.PlacementStep(product.Unit)
 
 	start, reason, ok := pickStart(bins, sources, locationID, step)
 	if !ok {
-		return binPlan{}, insufficientStockError{location: "warehouse " + warehouse.Code, available: decimal.Zero, requested: amount}
+		return binPlan{}, domain.InsufficientStockError{Location: "warehouse " + warehouse.Code, Available: decimal.Zero, Requested: amount}
 	}
-	allocations, fit := Plan(start, sources, quantity, step)
+	allocations, fit := domain.Plan(start, sources, quantity, step)
 	if fit < quantity {
-		return binPlan{}, insufficientStockError{location: "warehouse " + warehouse.Code, available: fromUnits(fit), requested: amount}
+		return binPlan{}, domain.InsufficientStockError{Location: "warehouse " + warehouse.Code, Available: domain.FromUnits(fit), Requested: amount}
 	}
 	return binPlan{Warehouse: warehouse, Start: start, Reason: reason, Allocations: allocations}, nil
 }
 
-func stockedBins(bins []Bin) []Bin {
-	var out []Bin
+func stockedBins(bins []domain.Bin) []domain.Bin {
+	var out []domain.Bin
 	for _, b := range bins {
 		if b.ProductQuantity > 0 {
 			held := b.ProductQuantity
-			out = append(out, Bin{ID: b.ID, Code: b.Code, Position: b.Position, Capacity: &held, ProductQuantity: held, AutoPlace: true})
+			out = append(out, domain.Bin{ID: b.ID, Code: b.Code, Position: b.Position, Capacity: &held, ProductQuantity: held, AutoPlace: true})
 		}
 	}
 	return out
 }
 
-func pickStart(bins, sources []Bin, locationID, step int64) (Bin, string, bool) {
+func pickStart(bins, sources []domain.Bin, locationID, step int64) (domain.Bin, string, bool) {
 	if locationID == 0 {
-		return ChooseStart(sources, Point{}, step)
+		return domain.ChooseStart(sources, domain.Point{}, step)
 	}
-	if i := slices.IndexFunc(sources, func(b Bin) bool { return b.ID == locationID }); i >= 0 {
-		return sources[i], ReasonChosen, true
+	if i := slices.IndexFunc(sources, func(b domain.Bin) bool { return b.ID == locationID }); i >= 0 {
+		return sources[i], domain.ReasonChosen, true
 	}
-	i := slices.IndexFunc(bins, func(b Bin) bool { return b.ID == locationID })
+	i := slices.IndexFunc(bins, func(b domain.Bin) bool { return b.ID == locationID })
 	empty := int64(0)
-	return Bin{ID: bins[i].ID, Code: bins[i].Code, Position: bins[i].Position, Capacity: &empty}, ReasonChosen, true
+	return domain.Bin{ID: bins[i].ID, Code: bins[i].Code, Position: bins[i].Position, Capacity: &empty}, domain.ReasonChosen, true
 }
 
 func (p binPlan) pickChanges() []change {
 	out := make([]change, len(p.Allocations))
 	for i, a := range p.Allocations {
-		out[i] = change{locationID: a.Bin.ID, delta: fromUnits(a.Quantity).Neg()}
+		out[i] = change{locationID: a.Bin.ID, delta: domain.FromUnits(a.Quantity).Neg()}
 	}
 	return out
 }
