@@ -10,12 +10,19 @@ servers:
   - url: /
 tags:
   - name: Products
+    description: Catalogue items with unit, reorder level and current weighted-average cost.
   - name: Locations
+    description: Warehouse bins with position, capacity and what they hold.
   - name: Warehouses
+    description: Warehouse layout, capacity, and bin placement and pick previews.
   - name: Inventory
+    description: Current stock from the balance cache, and stock rebuilt from the ledger at a past date.
   - name: Movements
+    description: Post IN, OUT, TRANSFER, ADJUSTMENT, REVERSAL and stock takes; browse history.
   - name: Reports
+    description: Low stock, valuation, reconciliation, cost check, activity, top movers, season forecast and product ledger.
   - name: Health
+    description: Liveness and database connectivity.
 
 paths:
   /api/products:
@@ -31,6 +38,7 @@ paths:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
         '400': { $ref: '#/components/responses/Error' }
         '409': { description: SKU already exists (DUPLICATE), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '500': { $ref: '#/components/responses/InternalError' }
     get:
       tags: [Products]
       summary: List products
@@ -50,6 +58,7 @@ paths:
                   page: { type: integer }
                   page_size: { type: integer }
                   total: { type: integer }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/products/{id}:
     parameters: [ { $ref: '#/components/parameters/ID' } ]
@@ -59,6 +68,7 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
         '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
     patch:
       tags: [Products]
       summary: Update name and/or reorder level (SKU and unit cannot change)
@@ -75,6 +85,7 @@ paths:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
         '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/products/{id}/balances:
     parameters: [ { $ref: '#/components/parameters/ID' } ]
@@ -84,6 +95,7 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Object' }
         '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/products/{id}/ledger:
     parameters: [ { $ref: '#/components/parameters/ID' } ]
@@ -94,6 +106,7 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/ObjectOrCSV' }
         '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/locations:
     post:
@@ -118,6 +131,7 @@ paths:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Location' } } } }
         '400': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
     get:
       tags: [Locations]
       summary: List bins
@@ -130,6 +144,7 @@ paths:
                 type: object
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/Location' } }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/warehouses:
     get:
@@ -137,6 +152,7 @@ paths:
       summary: Warehouses with perimeter, capacity and pcs in use
       responses:
         '200': { $ref: '#/components/responses/Object' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/placements/preview:
     post:
@@ -163,6 +179,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '409': { description: NO_SPACE with fit and requested details, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/picks/preview:
     post:
@@ -188,6 +205,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '409': { description: INSUFFICIENT_STOCK with available and requested details, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/locations/{id}:
     parameters: [ { $ref: '#/components/parameters/ID' } ]
@@ -197,6 +215,7 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Location' } } } }
         '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/locations/{id}/balances:
     parameters: [ { $ref: '#/components/parameters/ID' } ]
@@ -206,6 +225,7 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Object' }
         '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/inventory:
     get:
@@ -213,6 +233,7 @@ paths:
       summary: Stock grid, every product x every bin
       responses:
         '200': { $ref: '#/components/responses/Object' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/inventory/as-of:
     get:
@@ -225,6 +246,7 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Object' }
         '400': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/inventory/{productId}/{locationId}:
     parameters:
@@ -236,6 +258,7 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Object' }
         '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/movements/in:
     post:
@@ -263,6 +286,7 @@ paths:
         '400': { description: 'VALIDATION_ERROR, BAD_REQUEST or OUT_OF_RANGE', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: 'Product, location or movement not found', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '409': { description: 'INSUFFICIENT_STOCK, NO_SPACE, ALREADY_REVERSED, NOT_REVERSIBLE or IDEMPOTENCY_KEY_REUSED', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/movements/out:
     post:
@@ -380,6 +404,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '409': { description: NO_SPACE when a counted increase does not fit, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/movements:
     get:
@@ -402,6 +427,7 @@ paths:
             application/json: { schema: { type: object } }
             text/csv: { schema: { type: string } }
         '400': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/movements/{id}:
     parameters: [ { $ref: '#/components/parameters/ID' } ]
@@ -411,6 +437,7 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Object' }
         '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/reports/low-stock:
     get:
@@ -419,6 +446,7 @@ paths:
       parameters: [ { $ref: '#/components/parameters/Format' } ]
       responses:
         '200': { $ref: '#/components/responses/ObjectOrCSV' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/reports/valuation:
     get:
@@ -427,6 +455,7 @@ paths:
       parameters: [ { $ref: '#/components/parameters/Format' } ]
       responses:
         '200': { $ref: '#/components/responses/ObjectOrCSV' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/reports/reconciliation:
     get:
@@ -436,6 +465,7 @@ paths:
         - { name: only_drift, in: query, schema: { type: boolean } }
       responses:
         '200': { $ref: '#/components/responses/Object' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/reports/cost-check:
     get:
@@ -443,6 +473,7 @@ paths:
       summary: Replay the ledger and compare each product's average cost (read-only)
       responses:
         '200': { $ref: '#/components/responses/Object' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/reports/daily-activity:
     get:
@@ -453,6 +484,7 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Object' }
         '400': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/reports/top-movers:
     get:
@@ -464,6 +496,7 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Object' }
         '400': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/reports/season-forecast:
     get:
@@ -478,6 +511,7 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Object' }
         '400': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /healthz:
     get:
@@ -506,6 +540,9 @@ components:
     Error:
       description: Error
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    InternalError:
+      description: Unexpected server error; the cause is logged, not returned
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Object:
       description: OK
       content: { application/json: { schema: { type: object } } }
@@ -526,7 +563,21 @@ components:
         error:
           type: object
           properties:
-            code: { type: string }
+            code:
+              type: string
+              enum: [BAD_REQUEST, VALIDATION_ERROR, OUT_OF_RANGE, NOT_FOUND, DUPLICATE, INSUFFICIENT_STOCK, NO_SPACE, ALREADY_REVERSED, NOT_REVERSIBLE, IDEMPOTENCY_KEY_REUSED, INTERNAL]
+              description: |
+                - `BAD_REQUEST`: 400, malformed JSON or a bad id in the path
+                - `VALIDATION_ERROR`: 400, one message per invalid field in `fields`
+                - `OUT_OF_RANGE`: 400, a resulting quantity or value is too large to store
+                - `NOT_FOUND`: 404, the product, location, warehouse or movement does not exist
+                - `DUPLICATE`: 409, the SKU or bin code is already taken
+                - `INSUFFICIENT_STOCK`: 409, not enough stock; `details` has available and requested
+                - `NO_SPACE`: 409, the bin or warehouse cannot hold it; `details` has fit and requested
+                - `ALREADY_REVERSED`: 409, the movement has already been reversed
+                - `NOT_REVERSIBLE`: 409, a reversal, or a receipt whose stock was already used
+                - `IDEMPOTENCY_KEY_REUSED`: 409, the Idempotency-Key was used for a different request
+                - `INTERNAL`: 500, unexpected failure; details are logged, never returned
             message: { type: string }
             fields: { type: object, additionalProperties: { type: string } }
             details: { type: object, additionalProperties: { type: string } }
