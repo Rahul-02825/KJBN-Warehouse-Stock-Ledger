@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/api"
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi"
 )
 
 // HTTP tests: real routes and handlers, but every request here is rejected
@@ -67,7 +67,7 @@ func TestRecoverMiddleware(t *testing.T) {
 		panic("boom")
 	})
 	rec := httptest.NewRecorder()
-	api.Recover(panics).ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	httpapi.Recover(panics).ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
@@ -142,7 +142,7 @@ func TestHealth_DatabaseDown(t *testing.T) {
 	}
 	defer pool.Close()
 
-	status, body := send(t, api.NewRouter(pool), "GET", "/healthz", "")
+	status, body := send(t, httpapi.NewRouter(pool), "GET", "/healthz", "")
 	if status != http.StatusServiceUnavailable || body["status"] != "unavailable" {
 		t.Fatalf("got %d %v, want 503 unavailable", status, body)
 	}

@@ -1,36 +1,17 @@
-package api
+package httpapi
 
 import (
-	"errors"
 	"net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres"
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
-// Balances are read from the stock_balances cache. The ledger stays the source of truth;
-// the reconciliation report compares the two.
-
-type InventoryHandler struct {
-	q *sqlc.Queries
-}
-
-func NewInventoryHandler(q *sqlc.Queries) *InventoryHandler {
-	return &InventoryHandler{q: q}
-}
-
-func (h *InventoryHandler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/inventory", h.grid)
-	mux.HandleFunc("GET /api/inventory/as-of", h.asOf)
-	mux.HandleFunc("GET /api/inventory/{productId}/{locationId}", h.cell)
-	mux.HandleFunc("GET /api/products/{id}/balances", h.byProduct)
-	mux.HandleFunc("GET /api/locations/{id}/balances", h.byLocation)
-}
-
-type cellResponse struct {
+type stockCellJSON struct {
 	ProductID    int64           `json:"product_id"`
 	SKU          string          `json:"sku"`
 	ProductName  string          `json:"product_name"`
@@ -41,16 +22,15 @@ type cellResponse struct {
 	AverageCost  decimal.Decimal `json:"average_cost"`
 }
 
-// grid returns one row per product x location, with zero where nothing is stored.
-func (h *InventoryHandler) grid(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.q.ListStockOverview(r.Context())
+func (s *Server) stockGrid(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.q.ListStockOverview(r.Context())
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
 		return
 	}
-	data := make([]cellResponse, len(rows))
+	data := make([]stockCellJSON, len(rows))
 	for i, c := range rows {
-		data[i] = cellResponse{
+		data[i] = stockCellJSON{
 			ProductID:    c.ProductID,
 			SKU:          c.Sku,
 			ProductName:  c.ProductName,
@@ -64,25 +44,27 @@ func (h *InventoryHandler) grid(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})
 }
 
-func (h *InventoryHandler) cell(w http.ResponseWriter, r *http.Request) {
-	productID, ok := readPathID(w, r, "productId")
-	if !ok {
+func (s *Server) stockCell(w http.ResponseWriter, r *http.Request) {
+	productID, err := readID(r, "productId")
+	if err != nil {
+		writeError(w, r, err)
 		return
 	}
-	locationID, ok := readPathID(w, r, "locationId")
-	if !ok {
+	locationID, err := readID(r, "locationId")
+	if err != nil {
+		writeError(w, r, err)
 		return
 	}
-	c, err := h.q.GetStockBalance(r.Context(), sqlc.GetStockBalanceParams{ProductID: productID, LocationID: locationID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "product or location not found")
+	c, err := s.q.GetStockBalance(r.Context(), sqlc.GetStockBalanceParams{ProductID: productID, LocationID: locationID})
+	if postgres.IsNotFound(err) {
+		writeError(w, r, domain.NotFoundError{What: "product or location"})
 		return
 	}
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, cellResponse{
+	writeJSON(w, http.StatusOK, stockCellJSON{
 		ProductID:    c.ProductID,
 		SKU:          c.Sku,
 		ProductName:  c.ProductName,
@@ -94,39 +76,36 @@ func (h *InventoryHandler) cell(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-type productBalance struct {
+type productBalanceJSON struct {
 	LocationID   int64           `json:"location_id"`
 	LocationCode string          `json:"location_code"`
 	Quantity     decimal.Decimal `json:"quantity"`
 	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
-func (h *InventoryHandler) byProduct(w http.ResponseWriter, r *http.Request) {
-	id, ok := readID(w, r)
-	if !ok {
-		return
-	}
-	product, err := h.q.GetProductByID(r.Context(), id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "product not found")
-		return
-	}
+func (s *Server) productBalances(w http.ResponseWriter, r *http.Request) {
+	id, err := readID(r, "id")
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
 		return
 	}
-	rows, err := h.q.ListProductBalances(r.Context(), id)
+	product, err := s.findProduct(r, id)
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
+		return
+	}
+	rows, err := s.q.ListProductBalances(r.Context(), id)
+	if err != nil {
+		writeError(w, r, err)
 		return
 	}
 
 	total := decimal.Zero
-	data := make([]productBalance, len(rows))
+	data := make([]productBalanceJSON, len(rows))
 	for i, b := range rows {
 		qty := b.Quantity
 		total = total.Add(qty)
-		data[i] = productBalance{
+		data[i] = productBalanceJSON{
 			LocationID:   b.LocationID,
 			LocationCode: b.LocationCode,
 			Quantity:     qty,
@@ -142,7 +121,7 @@ func (h *InventoryHandler) byProduct(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-type locationBalance struct {
+type locationBalanceJSON struct {
 	ProductID   int64           `json:"product_id"`
 	SKU         string          `json:"sku"`
 	ProductName string          `json:"product_name"`
@@ -152,29 +131,26 @@ type locationBalance struct {
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
-func (h *InventoryHandler) byLocation(w http.ResponseWriter, r *http.Request) {
-	id, ok := readID(w, r)
-	if !ok {
-		return
-	}
-	location, err := h.q.GetLocationByID(r.Context(), id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "location not found")
-		return
-	}
+func (s *Server) locationBalances(w http.ResponseWriter, r *http.Request) {
+	id, err := readID(r, "id")
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
 		return
 	}
-	rows, err := h.q.ListLocationBalances(r.Context(), id)
+	location, err := s.findLocation(r, id)
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
+		return
+	}
+	rows, err := s.q.ListLocationBalances(r.Context(), id)
+	if err != nil {
+		writeError(w, r, err)
 		return
 	}
 
-	data := make([]locationBalance, len(rows))
+	data := make([]locationBalanceJSON, len(rows))
 	for i, b := range rows {
-		data[i] = locationBalance{
+		data[i] = locationBalanceJSON{
 			ProductID:   b.ProductID,
 			SKU:         b.Sku,
 			ProductName: b.ProductName,
@@ -191,7 +167,7 @@ func (h *InventoryHandler) byLocation(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-type asOfRow struct {
+type stockAsOfJSON struct {
 	ProductID    int64           `json:"product_id"`
 	SKU          string          `json:"sku"`
 	ProductName  string          `json:"product_name"`
@@ -201,32 +177,30 @@ type asOfRow struct {
 	Quantity     decimal.Decimal `json:"quantity"`
 }
 
-// asOf rebuilds stock at a past moment by summing ledger entries up to it.
-// ?date=2026-10-01 means the end of that day (IST); an RFC 3339 time is exact.
-// Optional product_id and location_id narrow the result.
-func (h *InventoryHandler) asOf(w http.ResponseWriter, r *http.Request) {
+func (s *Server) stockAsOf(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	fields := map[string]string{}
-	at := optionalTime(fields, query, "date", true)
+	at := queryTime(fields, query, "date", true)
 	if query.Get("date") == "" {
 		fields["date"] = "is required"
 	}
-	productID := optionalID(fields, query, "product_id")
-	locationID := optionalID(fields, query, "location_id")
-	if !valid(w, fields) {
+	productID := queryID(fields, query, "product_id")
+	locationID := queryID(fields, query, "location_id")
+	if len(fields) > 0 {
+		writeError(w, r, domain.ValidationError(fields))
 		return
 	}
 
-	rows, err := h.q.ListStockAsOf(r.Context(), sqlc.ListStockAsOfParams{
+	rows, err := s.q.ListStockAsOf(r.Context(), sqlc.ListStockAsOfParams{
 		AsOf: *at, ProductID: productID, LocationID: locationID,
 	})
 	if err != nil {
-		writeInternalError(w, err)
+		writeError(w, r, err)
 		return
 	}
-	data := make([]asOfRow, len(rows))
+	data := make([]stockAsOfJSON, len(rows))
 	for i, c := range rows {
-		data[i] = asOfRow{
+		data[i] = stockAsOfJSON{
 			ProductID:    c.ProductID,
 			SKU:          c.Sku,
 			ProductName:  c.ProductName,
