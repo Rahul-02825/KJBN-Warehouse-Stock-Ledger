@@ -78,11 +78,14 @@ build:
 
 # Loads .env so TEST_DATABASE_URL is picked up; integration tests skip when it is unset.
 test:
-	@set -a; [ -f $(ENV_FILE) ] && source $(ENV_FILE); set +a; go test -race ./...
+	@set -a; [ -f $(ENV_FILE) ] && source $(ENV_FILE); set +a; \
+	if [ -n "$${TEST_DATABASE_URL:-}" ]; then migrate -path $(MIGRATIONS) -database "$$TEST_DATABASE_URL" up; fi; \
+	go test -race ./...
 
 cover:
 	@set -a; [ -f $(ENV_FILE) ] && source $(ENV_FILE); set +a; \
-	go test -race -coverpkg=./internal/domain/...,./internal/ledger/...,./internal/httpapi/... -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | tail -1
+	if [ -n "$${TEST_DATABASE_URL:-}" ]; then migrate -path $(MIGRATIONS) -database "$$TEST_DATABASE_URL" up; fi; \
+	go test -race -coverpkg=./internal/domain/...,./internal/ledger/...,./internal/httpapi/... -coverprofile=coverage.out ./... && go tool cover -func=coverage.out > coverage.txt && tail -1 coverage.txt
 
 # Fires concurrent requests at a running API (make run first). Writes test data.
 URL ?= http://localhost:8080
