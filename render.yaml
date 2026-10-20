@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: stock-ledger-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /healthz
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - backend/**
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ALLOWED_ORIGIN
+        sync: false
+      - key: APP_ENV
+        value: production

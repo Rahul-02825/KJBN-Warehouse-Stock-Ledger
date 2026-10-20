@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -43,7 +44,11 @@ func Recover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				slog.Error("panic", "request_id", requestID(r), "error", err, "path", r.URL.Path)
+				detail := any(err)
+				if hideErrorDetails {
+					detail = fmt.Sprintf("%T", err)
+				}
+				slog.Error("panic", "request_id", requestID(r), "error", detail, "path", r.URL.Path)
 				writeErrorBody(w, http.StatusInternalServerError, errorBody{Code: "INTERNAL", Message: "internal server error"})
 			}
 		}()

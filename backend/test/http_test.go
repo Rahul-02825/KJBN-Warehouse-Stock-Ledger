@@ -142,7 +142,7 @@ func TestHealth_DatabaseDown(t *testing.T) {
 	}
 	defer pool.Close()
 
-	status, body := send(t, httpapi.NewRouter(pool), "GET", "/healthz", "")
+	status, body := send(t, httpapi.NewRouter(pool, httpapi.Config{}), "GET", "/healthz", "")
 	if status != http.StatusServiceUnavailable || body["status"] != "unavailable" {
 		t.Fatalf("got %d %v, want 503 unavailable", status, body)
 	}

@@ -18,7 +18,7 @@ import (
 func setupWarehouse(t *testing.T) (http.Handler, *pgxpool.Pool) {
 	t.Helper()
 	pool := testDB(t)
-	h := httpapi.NewRouter(pool)
+	h := httpapi.NewRouter(pool, httpapi.Config{})
 	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"RICE-25","name":"Rice 25 kg bag","unit":"pcs","reorder_level":"10"}`)
 	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"DAL","name":"Toor dal","unit":"kg"}`)
 	mustSend(t, h, 201, "POST", "/api/locations", `{"code":"A-01"}`)

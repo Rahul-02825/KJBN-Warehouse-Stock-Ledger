@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
+import { apiURL } from '../api/client'
 import { icon } from './icon'
 import { ButtonLink } from './ui'
 
@@ -75,9 +76,15 @@ export function Layout() {
         )}
       </header>
 
-      <main className="mx-auto max-w-[1100px] animate-reveal px-4 pb-24 pt-10 sm:px-8 sm:pt-14">
+      <main className="mx-auto max-w-[1100px] animate-reveal px-4 pb-16 pt-10 sm:px-8 sm:pt-14">
         <Outlet />
       </main>
+
+      <footer className="mx-auto max-w-[1100px] border-t border-line px-4 py-6 text-[12.5px] text-muted sm:px-8">
+        <a href={apiURL('/api/docs')} target="_blank" rel="noreferrer" className="link-quiet">
+          API docs
+        </a>
+      </footer>
     </div>
   )
 }

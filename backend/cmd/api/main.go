@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -39,7 +40,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         ":" + port,
-		Handler:      httpapi.NewRouter(pool),
+		Handler:      httpapi.NewRouter(pool, config()),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}
@@ -60,4 +61,14 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	srv.Shutdown(ctx)
+}
+
+func config() httpapi.Config {
+	var origins []string
+	for _, origin := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGIN"), ",") {
+		if origin = strings.TrimSpace(origin); origin != "" {
+			origins = append(origins, origin)
+		}
+	}
+	return httpapi.Config{AllowedOrigins: origins, Production: os.Getenv("APP_ENV") == "production"}
 }

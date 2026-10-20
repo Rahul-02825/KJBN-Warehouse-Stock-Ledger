@@ -36,13 +36,13 @@ func errorCode(body map[string]any) string {
 
 // routerWithoutDB is enough for requests that are rejected before any query runs.
 func routerWithoutDB() http.Handler {
-	return httpapi.NewRouter(nil)
+	return httpapi.NewRouter(nil, httpapi.Config{})
 }
 
 // routerWithDB returns the full router on an emptied test database.
 func routerWithDB(t *testing.T) http.Handler {
 	t.Helper()
-	return httpapi.NewRouter(testDB(t))
+	return httpapi.NewRouter(testDB(t), httpapi.Config{})
 }
 
 // testDB connects to TEST_DATABASE_URL and empties all tables first.

@@ -3,10 +3,16 @@ package test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"regexp"
+	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/httpapi"
 )
 
 func captureLogs(t *testing.T) *bytes.Buffer {
@@ -88,5 +94,60 @@ func TestReversal_LogsMovementID(t *testing.T) {
 	rejected := logLines(t, logs, "request rejected")
 	if len(rejected) != 1 || rejected[0]["movement_id"] != float64(999) {
 		t.Errorf("rejected reversal should log movement_id 999: %v", rejected)
+	}
+}
+
+func unreachableDB(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	pool, err := pgxpool.New(context.Background(), "postgres://nobody@127.0.0.1:1/none?connect_timeout=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+func TestInternalError_ProductionLogsHideTheErrorText(t *testing.T) {
+	for _, production := range []bool{false, true} {
+		logs := captureLogs(t)
+		h := httpapi.NewRouter(unreachableDB(t), httpapi.Config{Production: production})
+
+		status, body := send(t, h, "GET", "/api/products", "")
+		if status != 500 || errorCode(body) != "INTERNAL" {
+			t.Fatalf("production=%v: got %d %v, want 500 INTERNAL", production, status, body)
+		}
+		lines := logLines(t, logs, "internal error")
+		if len(lines) != 1 {
+			t.Fatalf("production=%v: want 1 internal error line, got %s", production, logs.String())
+		}
+		_, hasReason := lines[0]["reason"]
+		if production && (hasReason || lines[0]["error_kind"] == nil || strings.Contains(logs.String(), "127.0.0.1")) {
+			t.Errorf("production log should hide the error text: %v", lines[0])
+		}
+		if !production && !hasReason {
+			t.Errorf("development log should keep the error text: %v", lines[0])
+		}
+	}
+}
+
+func TestCORS_AllowsOnlyTheConfiguredOrigin(t *testing.T) {
+	h := httpapi.NewRouter(nil, httpapi.Config{AllowedOrigins: []string{"https://ledger.vercel.app"}})
+
+	allowed := sendRaw(h, "GET", "/api/products/abc", "", map[string]string{"Origin": "https://ledger.vercel.app"})
+	if allowed.Header().Get("Access-Control-Allow-Origin") != "https://ledger.vercel.app" ||
+		!strings.Contains(allowed.Header().Get("Access-Control-Expose-Headers"), "X-Request-ID") {
+		t.Errorf("allowed origin headers = %v", allowed.Header())
+	}
+
+	other := sendRaw(h, "GET", "/api/products/abc", "", map[string]string{"Origin": "https://evil.example"})
+	if other.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Errorf("an unknown origin must not be allowed: %v", other.Header())
+	}
+
+	preflight := sendRaw(h, "OPTIONS", "/api/movements/out", "", map[string]string{
+		"Origin": "https://ledger.vercel.app", "Access-Control-Request-Method": "POST",
+	})
+	if preflight.Code != 204 || !strings.Contains(preflight.Header().Get("Access-Control-Allow-Headers"), "Idempotency-Key") {
+		t.Errorf("preflight = %d %v", preflight.Code, preflight.Header())
 	}
 }

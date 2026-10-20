@@ -9,13 +9,19 @@ import (
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
+type Config struct {
+	AllowedOrigins []string
+	Production     bool
+}
+
 type Server struct {
 	pool   *pgxpool.Pool
 	q      *sqlc.Queries
 	ledger *ledger.Ledger
 }
 
-func NewRouter(pool *pgxpool.Pool) http.Handler {
+func NewRouter(pool *pgxpool.Pool, cfg Config) http.Handler {
+	hideErrorDetails = cfg.Production
 	s := &Server{pool: pool, q: sqlc.New(pool), ledger: ledger.New(pool)}
 	mux := http.NewServeMux()
 
@@ -60,5 +66,5 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 	mux.HandleFunc("GET /api/reports/top-movers", s.topMoversReport)
 	mux.HandleFunc("GET /api/reports/season-forecast", s.seasonForecastReport)
 
-	return Logger(Recover(mux))
+	return Logger(Recover(CORS(cfg.AllowedOrigins, mux)))
 }

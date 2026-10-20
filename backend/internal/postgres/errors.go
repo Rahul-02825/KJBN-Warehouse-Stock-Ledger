@@ -28,3 +28,11 @@ func ConstraintName(err error) string {
 	}
 	return ""
 }
+
+func ErrorCode(err error) (code, constraint string, ok bool) {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code, pgErr.ConstraintName, true
+	}
+	return "", "", false
+}

@@ -16,7 +16,7 @@ import (
 func setupLayout(t *testing.T) (http.Handler, *pgxpool.Pool) {
 	t.Helper()
 	pool := testDB(t)
-	h := httpapi.NewRouter(pool)
+	h := httpapi.NewRouter(pool, httpapi.Config{})
 	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"RICE","name":"Rice bag","unit":"pcs"}`)
 	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"WHEAT","name":"Wheat bag","unit":"pcs"}`)
 	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"DAL","name":"Toor dal","unit":"kg"}`)
@@ -58,7 +58,7 @@ func countMovements(t *testing.T, pool *pgxpool.Pool) int {
 
 func TestBinLayout_Validation(t *testing.T) {
 	pool := testDB(t)
-	h := httpapi.NewRouter(pool)
+	h := httpapi.NewRouter(pool, httpapi.Config{})
 	if _, err := pool.Exec(context.Background(), "UPDATE warehouses SET radius_m = 20, capacity = 100"); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestCapacity_KgCountsAndPiecesStayWhole(t *testing.T) {
 
 func TestReceive_ConcurrentReceiptsNeverOverfillABin(t *testing.T) {
 	pool := testDB(t)
-	h := httpapi.NewRouter(pool)
+	h := httpapi.NewRouter(pool, httpapi.Config{})
 	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"RICE","name":"Rice","unit":"pcs"}`)
 	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"WHEAT","name":"Wheat","unit":"pcs"}`)
 	mustSend(t, h, 201, "POST", "/api/locations", `{"code":"ONLY","capacity":10}`)

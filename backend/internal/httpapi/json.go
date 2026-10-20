@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -18,6 +19,8 @@ type errorBody struct {
 	Fields  map[string]string `json:"fields,omitempty"`
 	Details map[string]string `json:"details,omitempty"`
 }
+
+var hideErrorDetails bool
 
 type badRequestError struct{ message string }
 
@@ -70,7 +73,7 @@ func writeError(w http.ResponseWriter, r *http.Request, err error, fields ...any
 	case postgres.IsNumericOverflow(err):
 		writeErrorBody(w, http.StatusBadRequest, errorBody{Code: "OUT_OF_RANGE", Message: "a resulting quantity or value is too large"})
 	default:
-		slog.Error("internal error", logFields(r, err, fields)...)
+		slog.Error("internal error", internalErrorFields(r, err, fields)...)
 		writeErrorBody(w, http.StatusInternalServerError, errorBody{Code: "INTERNAL", Message: "internal server error"})
 		return
 	}
@@ -79,6 +82,19 @@ func writeError(w http.ResponseWriter, r *http.Request, err error, fields ...any
 
 func logFields(r *http.Request, err error, fields []any) []any {
 	all := []any{"request_id", requestID(r), "path", r.URL.Path, "reason", err.Error()}
+	return append(all, fields...)
+}
+
+func internalErrorFields(r *http.Request, err error, fields []any) []any {
+	if !hideErrorDetails {
+		return logFields(r, err, fields)
+	}
+	all := []any{"request_id", requestID(r), "path", r.URL.Path}
+	if code, constraint, ok := postgres.ErrorCode(err); ok {
+		all = append(all, "error_kind", "postgres", "sqlstate", code, "constraint", constraint)
+	} else {
+		all = append(all, "error_kind", fmt.Sprintf("%T", err))
+	}
 	return append(all, fields...)
 }
 

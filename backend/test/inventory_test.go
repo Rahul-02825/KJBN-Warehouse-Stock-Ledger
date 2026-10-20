@@ -9,7 +9,7 @@ import (
 
 // Integration test for the read-only inventory endpoints.
 func TestInventoryBalances(t *testing.T) {
-	h := httpapi.NewRouter(testDB(t))
+	h := httpapi.NewRouter(testDB(t), httpapi.Config{})
 
 	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"RICE-25","name":"Rice","unit":"pcs"}`)
 	mustSend(t, h, 201, "POST", "/api/products", `{"sku":"DAL","name":"Dal","unit":"kg"}`)

@@ -51,6 +51,9 @@ jobs:
       - name: Format
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
 
+      - name: OpenAPI spec is valid
+        run: npx -y @redocly/cli@1.25.15 lint --skip-rule security-defined --skip-rule operation-operationId --skip-rule operation-4xx-response --skip-rule info-license internal/httpapi/openapi.yaml
+
       - name: Vet
         run: go vet ./...
 
@@ -71,3 +74,32 @@ jobs:
           DATABASE_URL="$TEST_DATABASE_URL" PORT=8080 go run ./cmd/api > api.log 2>&1 &
           for i in $(seq 1 30); do curl -sf localhost:8080/healthz && break; sleep 1; done
           go run ./cmd/loadtest -url http://localhost:8080 || (cat api.log && exit 1)
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
