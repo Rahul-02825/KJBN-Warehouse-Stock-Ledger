@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
@@ -98,7 +99,7 @@ func (h *LocationHandler) create(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w, err)
 		return
 	}
-	if !valid(w, CheckBinLayout(warehouse, Point{req.X, req.Y}, req.Capacity)) {
+	if !valid(w, domain.CheckBinLayout(siteOf(warehouse), domain.Point{X: req.X, Y: req.Y}, req.Capacity)) {
 		return
 	}
 
@@ -164,25 +165,13 @@ func (h *LocationHandler) get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toLocationResponse(location))
 }
 
-func CheckBinLayout(warehouse sqlc.Warehouse, position Point, capacity *int64) map[string]string {
-	fields := map[string]string{}
-	if Distance(position, Point{warehouse.X, warehouse.Y}) > warehouse.RadiusM {
-		fields["x"] = "bin must be within the warehouse perimeter"
-	}
-	if capacity != nil {
-		switch {
-		case *capacity <= 0:
-			fields["capacity"] = "must be greater than zero, or left empty for no limit"
-		case warehouse.Capacity.Valid && *capacity > warehouse.Capacity.Int64:
-			fields["capacity"] = "must not exceed the warehouse capacity"
-		}
-	}
-	return fields
-}
-
 func optCapacity(capacity *int64) pgtype.Int8 {
 	if capacity == nil {
 		return pgtype.Int8{}
 	}
 	return pgtype.Int8{Int64: *capacity, Valid: true}
+}
+
+func siteOf(w sqlc.Warehouse) domain.Site {
+	return domain.Site{Center: domain.Point{X: w.X, Y: w.Y}, RadiusM: w.RadiusM, Capacity: idPtr(w.Capacity)}
 }

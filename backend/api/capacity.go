@@ -3,50 +3,27 @@ package api
 import (
 	"context"
 	"errors"
-	"fmt"
 	"slices"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
-const unitScale = 10000
-
-func toUnits(d decimal.Decimal) int64 { return d.Shift(4).IntPart() }
-
-func fromUnits(n int64) decimal.Decimal { return decimal.New(n, -4) }
-
-func placementStep(unit string) int64 {
-	if unit == "pcs" {
-		return unitScale
-	}
-	return 1
-}
-
-type noSpaceError struct {
-	place     string
-	fit       int64
-	requested int64
-}
-
-func (e noSpaceError) Error() string {
-	return fmt.Sprintf("cannot accommodate %s units in %s: only %s fit", fromUnits(e.requested), e.place, fromUnits(e.fit))
-}
-
 type binPlan struct {
 	Warehouse   sqlc.Warehouse
-	Start       Bin
+	Start       domain.Bin
 	Reason      string
-	Allocations []Allocation
+	Allocations []domain.Allocation
 }
 
 func (p binPlan) changes() []change {
 	out := make([]change, len(p.Allocations))
 	for i, a := range p.Allocations {
-		out[i] = change{locationID: a.Bin.ID, delta: fromUnits(a.Quantity)}
+		out[i] = change{locationID: a.Bin.ID, delta: domain.FromUnits(a.Quantity)}
 	}
 	return out
 }
@@ -80,25 +57,25 @@ func resolveWarehouse(ctx context.Context, q *sqlc.Queries, locationID, warehous
 
 func warehouseErr(err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
-		return notFoundError{"warehouse"}
+		return domain.NotFoundError{What: "warehouse"}
 	}
 	return err
 }
 
-func loadBins(ctx context.Context, q *sqlc.Queries, warehouseID, productID int64) ([]Bin, error) {
+func loadBins(ctx context.Context, q *sqlc.Queries, warehouseID, productID int64) ([]domain.Bin, error) {
 	rows, err := q.ListBinUsage(ctx, sqlc.ListBinUsageParams{WarehouseID: warehouseID, ProductID: productID})
 	if err != nil {
 		return nil, err
 	}
-	bins := make([]Bin, len(rows))
+	bins := make([]domain.Bin, len(rows))
 	for i, r := range rows {
-		bins[i] = Bin{
+		bins[i] = domain.Bin{
 			ID:              r.ID,
 			Code:            r.Code,
-			Position:        Point{r.X, r.Y},
+			Position:        domain.Point{X: r.X, Y: r.Y},
 			Capacity:        capacityUnits(r.Capacity),
-			Used:            toUnits(toDecimal(r.Used)),
-			ProductQuantity: toUnits(toDecimal(r.ProductQuantity)),
+			Used:            domain.ToUnits(toDecimal(r.Used)),
+			ProductQuantity: domain.ToUnits(toDecimal(r.ProductQuantity)),
 			AutoPlace:       r.AutoPlace,
 		}
 	}
@@ -109,7 +86,7 @@ func capacityUnits(capacity pgtype.Int8) *int64 {
 	if !capacity.Valid {
 		return nil
 	}
-	units := capacity.Int64 * unitScale
+	units := capacity.Int64 * domain.UnitScale
 	return &units
 }
 
@@ -118,39 +95,39 @@ func planReceipt(ctx context.Context, q *sqlc.Queries, warehouse sqlc.Warehouse,
 	if err != nil {
 		return binPlan{}, err
 	}
-	quantity := toUnits(amount)
-	step := placementStep(product.Unit)
+	quantity := domain.ToUnits(amount)
+	step := domain.PlacementStep(product.Unit)
 	place := "warehouse " + warehouse.Code
 	start, reason, ok := startingBin(bins, warehouse, locationID, step)
 	if !ok {
-		return binPlan{}, noSpaceError{place: place, requested: quantity}
+		return binPlan{}, domain.NoSpaceError{Place: place, Requested: amount}
 	}
 
-	allocations, fit := Plan(start, bins, quantity, step)
+	allocations, fit := domain.Plan(start, bins, quantity, step)
 	fit = min(fit, warehouseFree(warehouse, bins))
 	if fit < quantity {
-		return binPlan{}, noSpaceError{place: place, fit: fit, requested: quantity}
+		return binPlan{}, domain.NoSpaceError{Place: place, Fit: domain.FromUnits(fit), Requested: amount}
 	}
 	return binPlan{Warehouse: warehouse, Start: start, Reason: reason, Allocations: allocations}, nil
 }
 
-func startingBin(bins []Bin, warehouse sqlc.Warehouse, locationID, step int64) (Bin, string, bool) {
+func startingBin(bins []domain.Bin, warehouse sqlc.Warehouse, locationID, step int64) (domain.Bin, string, bool) {
 	if locationID > 0 {
-		i := slices.IndexFunc(bins, func(b Bin) bool { return b.ID == locationID })
-		return bins[i], ReasonChosen, true
+		i := slices.IndexFunc(bins, func(b domain.Bin) bool { return b.ID == locationID })
+		return bins[i], domain.ReasonChosen, true
 	}
-	return ChooseStart(bins, Point{warehouse.X, warehouse.Y}, step)
+	return domain.ChooseStart(bins, domain.Point{X: warehouse.X, Y: warehouse.Y}, step)
 }
 
-func warehouseFree(warehouse sqlc.Warehouse, bins []Bin) int64 {
+func warehouseFree(warehouse sqlc.Warehouse, bins []domain.Bin) int64 {
 	if !warehouse.Capacity.Valid {
-		return Bin{}.Free()
+		return domain.Bin{}.Free()
 	}
 	var used int64
 	for _, b := range bins {
 		used += b.Used
 	}
-	return max(warehouse.Capacity.Int64*unitScale-used, 0)
+	return max(warehouse.Capacity.Int64*domain.UnitScale-used, 0)
 }
 
 func ensureSpace(ctx context.Context, q *sqlc.Queries, product sqlc.Product, changes []change) error {
@@ -161,7 +138,7 @@ func ensureSpace(ctx context.Context, q *sqlc.Queries, product sqlc.Product, cha
 		if err != nil {
 			return err
 		}
-		netByWarehouse[location.WarehouseID] += toUnits(c.delta)
+		netByWarehouse[location.WarehouseID] += domain.ToUnits(c.delta)
 		if c.delta.IsPositive() {
 			addsByWarehouse[location.WarehouseID] = append(addsByWarehouse[location.WarehouseID], c)
 		}
@@ -191,13 +168,13 @@ func ensureWarehouseSpace(ctx context.Context, q *sqlc.Queries, productID, wareh
 		return err
 	}
 	for _, c := range adds {
-		bin := bins[slices.IndexFunc(bins, func(b Bin) bool { return b.ID == c.locationID })]
-		if wanted := toUnits(c.delta); wanted > bin.Free() {
-			return noSpaceError{place: "bin " + bin.Code, fit: bin.Free(), requested: wanted}
+		bin := bins[slices.IndexFunc(bins, func(b domain.Bin) bool { return b.ID == c.locationID })]
+		if wanted := domain.ToUnits(c.delta); wanted > bin.Free() {
+			return domain.NoSpaceError{Place: "bin " + bin.Code, Fit: domain.FromUnits(bin.Free()), Requested: c.delta}
 		}
 	}
 	if free := warehouseFree(warehouse, bins); net > free {
-		return noSpaceError{place: "warehouse " + warehouse.Code, fit: free, requested: net}
+		return domain.NoSpaceError{Place: "warehouse " + warehouse.Code, Fit: domain.FromUnits(free), Requested: domain.FromUnits(net)}
 	}
 	return nil
 }

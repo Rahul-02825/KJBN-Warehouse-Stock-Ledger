@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
@@ -121,11 +122,11 @@ func (r *AdjustmentRequest) validate() map[string]string {
 	f := map[string]string{}
 	checkIDs(f, map[string]int64{"product_id": r.ProductID, "location_id": r.LocationID})
 	checkAmount(f, "quantity", r.Quantity.Abs())
-	if !ValidReason(r.Reason) {
-		f["reason"] = "must be one of damaged, expired, count_correction, theft, other"
+	if !domain.ValidReason(r.Reason) {
+		f["reason"] = domain.ReasonsMessage()
 	}
-	if r.Reason == "other" && r.Note == "" {
-		f["note"] = "is required when reason is other"
+	if domain.NeedsNote(r.Reason) && r.Note == "" {
+		f["note"] = "is required when reason is " + r.Reason
 	}
 	if len(r.Note) > 1000 {
 		f["note"] = "max 1000 characters"
@@ -263,11 +264,10 @@ func (h *MovementHandler) list(w http.ResponseWriter, r *http.Request) {
 		ToDate:     optionalTime(fields, query, "to", true),
 	}
 	if t := strings.ToUpper(query.Get("type")); t != "" {
-		switch t {
-		case "IN", "OUT", "TRANSFER", "ADJUSTMENT", "REVERSAL":
+		if domain.ValidMovementType(t) {
 			f.MovementType = pgtype.Text{String: t, Valid: true}
-		default:
-			fields["type"] = "must be one of IN, OUT, TRANSFER, ADJUSTMENT, REVERSAL"
+		} else {
+			fields["type"] = domain.MovementTypesMessage()
 		}
 	}
 	if ref := strings.TrimSpace(query.Get("reference")); ref != "" {
@@ -372,11 +372,11 @@ func (h *MovementHandler) respond(w http.ResponseWriter, r *http.Request, key st
 
 // writePostingError maps business rule failures to HTTP responses.
 func writePostingError(w http.ResponseWriter, r *http.Request, err error) {
-	var ve validationError
-	var nf notFoundError
-	var is insufficientStockError
-	var nr notReversibleError
-	var ns noSpaceError
+	var ve domain.ValidationError
+	var nf domain.NotFoundError
+	var is domain.InsufficientStockError
+	var nr domain.NotReversibleError
+	var ns domain.NoSpaceError
 
 	switch {
 	case errors.As(err, &ve):
@@ -387,9 +387,9 @@ func writePostingError(w http.ResponseWriter, r *http.Request, err error) {
 		writeJSON(w, http.StatusConflict, map[string]errorBody{"error": {
 			Code:    "INSUFFICIENT_STOCK",
 			Message: is.Error(),
-			Details: map[string]string{"available": is.available.String(), "requested": is.requested.String()},
+			Details: map[string]string{"available": is.Available.String(), "requested": is.Requested.String()},
 		}})
-	case errors.Is(err, errAlreadyReversed):
+	case errors.Is(err, domain.ErrAlreadyReversed):
 		writeError(w, http.StatusConflict, "ALREADY_REVERSED", err.Error())
 	case errors.As(err, &nr):
 		writeError(w, http.StatusConflict, "NOT_REVERSIBLE", nr.Error())
@@ -397,7 +397,7 @@ func writePostingError(w http.ResponseWriter, r *http.Request, err error) {
 		writeJSON(w, http.StatusConflict, map[string]errorBody{"error": {
 			Code:    "NO_SPACE",
 			Message: ns.Error(),
-			Details: map[string]string{"fit": fromUnits(ns.fit).String(), "requested": fromUnits(ns.requested).String()},
+			Details: map[string]string{"fit": ns.Fit.String(), "requested": ns.Requested.String()},
 		}})
 	case isNumericOverflow(err):
 		writeError(w, http.StatusBadRequest, "OUT_OF_RANGE", "a resulting quantity or value is too large")
@@ -505,7 +505,7 @@ func checkOptionalIDs(fields map[string]string, ids map[string]int64) {
 }
 
 func checkAmount(fields map[string]string, name string, d decimal.Decimal) {
-	if msg := ValidateQuantity(d); msg != "" {
+	if msg := domain.ValidateQuantity(d); msg != "" {
 		fields[name] = msg
 	}
 }

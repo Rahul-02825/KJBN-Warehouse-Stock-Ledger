@@ -10,6 +10,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/postgres/sqlc"
 )
 
@@ -46,12 +47,8 @@ func (r *StockTakeRequest) validate() map[string]string {
 			f[field] = "product_id must be a positive integer"
 		case seen[c.ProductID]:
 			f[field] = "each product can be counted once"
-		case c.Counted.IsNegative():
-			f[field] = "counted must not be negative"
-		case !c.Counted.Equal(c.Counted.Round(4)):
-			f[field] = "counted must have at most 4 decimal places"
-		case c.Counted.GreaterThan(maxAmount):
-			f[field] = "counted must not exceed 1000000000"
+		case domain.ValidateCount(c.Counted) != "":
+			f[field] = domain.ValidateCount(c.Counted)
 		}
 		seen[c.ProductID] = true
 	}
@@ -94,7 +91,7 @@ func (l *Ledger) PostStockTake(ctx context.Context, req StockTakeRequest) (resul
 				result.Unchanged++
 				continue
 			}
-			row := adjustmentRow(product, location.ID, difference, "count_correction", req.Note, reference, req.CreatedBy)
+			row := adjustmentRow(product, location.ID, difference, domain.StockTakeReason, req.Note, reference, req.CreatedBy)
 			m, err := applyChanges(ctx, q, product, row, []change{{location.ID, difference}})
 			if err != nil {
 				return err

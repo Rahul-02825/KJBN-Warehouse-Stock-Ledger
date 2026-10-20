@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/api"
+	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
 )
 
 func setupLayout(t *testing.T) (http.Handler, *pgxpool.Pool) {
@@ -241,7 +242,7 @@ func TestPreview_ShowsPlanWithoutPosting(t *testing.T) {
 	before := countMovements(t, pool)
 
 	body := mustSend(t, h, 200, "POST", "/api/placements/preview", `{"product_id":1,"quantity":"30"}`)
-	if body["start_location_code"] != "A-01" || body["reason"] != api.ReasonProductBin {
+	if body["start_location_code"] != "A-01" || body["reason"] != domain.ReasonProductBin {
 		t.Errorf("start = %v (%v)", body["start_location_code"], body["reason"])
 	}
 	allocations := body["allocations"].([]any)

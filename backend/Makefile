@@ -78,11 +78,11 @@ build:
 
 # Loads .env so TEST_DATABASE_URL is picked up; integration tests skip when it is unset.
 test:
-	@set -a; [ -f $(ENV_FILE) ] && source $(ENV_FILE); set +a; go test -race ./test/...
+	@set -a; [ -f $(ENV_FILE) ] && source $(ENV_FILE); set +a; go test -race ./...
 
 cover:
 	@set -a; [ -f $(ENV_FILE) ] && source $(ENV_FILE); set +a; \
-	go test -race -coverpkg=./api/... -coverprofile=coverage.out ./test/... && go tool cover -func=coverage.out | tail -1
+	go test -race -coverpkg=./api/...,./internal/domain/... -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | tail -1
 
 # Fires concurrent requests at a running API (make run first). Writes test data.
 URL ?= http://localhost:8080
