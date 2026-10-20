@@ -421,8 +421,3 @@ Request bodies, headers and secrets are never logged.
 - **Idempotency** matches a retried key on the movement type and product only. A retry with the same key but a different quantity returns the original movement instead of an error.
 - **The season forecast** is a simple comparison with last year's shipments in the same window; it doesn't forecast trends.
 
-## 12. AI and third-party usage
-
-- **AI assistant:** Claude Code (Anthropic) was used throughout development: planning milestones, writing and refactoring Go, SQL and React code, writing tests, reviewing edge cases, and drafting documentation. I directed the design decisions and reviewed, ran and tested the output. The full prompt log is in [PROMPTS.md](PROMPTS.md).
-- **Libraries:** `pgx/v5`, `pgx-shopspring-decimal`, `shopspring/decimal`, `sqlc`, `golang-migrate` (backend); React, React Router, Vite, Tailwind CSS, lucide-react, Vitest (frontend). Swagger UI is loaded from unpkg on the docs page.
-- **Design:** the UI's visual style (colours, fonts, spacing) follows the public kjbnlabs.in website. The notes are in `docs/design.md`, which is kept out of git.
