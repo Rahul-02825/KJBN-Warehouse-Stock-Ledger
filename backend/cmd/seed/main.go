@@ -36,6 +36,17 @@ type opening struct {
 	quantity      string
 }
 
+type pastSales struct {
+	sku, location string
+	weekly        string
+	unitCost      string
+}
+
+const (
+	pastReceipt = "Past receipt"
+	pastSale    = "Past sale"
+)
+
 var products = []product{
 	{"RICE-25", "Rice 25 kg bag", "pcs", "10", "1100.00"},
 	{"WHEAT-10", "Wheat flour 10 kg bag", "pcs", "20", "380.00"},
@@ -76,6 +87,12 @@ var openings = []opening{
 	{"SALT-1", "A-02", "35"},
 	{"TEA-500", "B-02", "48"},
 	{"GHEE-1", "COLD-01", "22"},
+}
+
+var history = []pastSales{
+	{"RICE-25", "A-01", "30", "1050.00"},
+	{"DAL-TOOR", "A-02", "60", "135.00"},
+	{"OIL-SUN", "B-01", "70", "122.00"},
 }
 
 func main() {
@@ -153,6 +170,16 @@ func run(ctx context.Context, pool *pgxpool.Pool) error {
 		costs[p.sku] = p.unitCost
 	}
 
+	historyStart := time.Now().AddDate(-1, 0, -7)
+	pastMovements := 0
+	for _, h := range history {
+		n, err := postHistory(ctx, q, prodIDs[h.sku], locIDs[h.location], h, historyStart)
+		if err != nil {
+			return fmt.Errorf("history %s: %w", h.sku, err)
+		}
+		pastMovements += n
+	}
+
 	posted := 0
 	for _, o := range openings {
 		if !fresh[o.sku] {
@@ -167,7 +194,7 @@ func run(ctx context.Context, pool *pgxpool.Pool) error {
 	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
-	fmt.Printf("seed: %d new locations, %d new products, %d opening movements\n", newLocs, len(fresh), posted)
+	fmt.Printf("seed: %d new locations, %d new products, %d opening movements, %d past movements\n", newLocs, len(fresh), posted, pastMovements)
 	return nil
 }
 
@@ -203,6 +230,70 @@ func postOpening(ctx context.Context, q *sqlc.Queries, productID, locationID int
 	// Every opening receipt for a product uses one cost, so the average equals that cost.
 	_, err = q.UpdateProductAverageCost(ctx, sqlc.UpdateProductAverageCostParams{ID: productID, AverageCost: cost})
 	return err
+}
+
+func postHistory(ctx context.Context, q *sqlc.Queries, productID, locationID int64, h pastSales, start time.Time) (int, error) {
+	done, err := q.CountProductMovementsWithReference(ctx, sqlc.CountProductMovementsWithReferenceParams{
+		ProductID: productID,
+		Reference: pastReceipt,
+	})
+	if err != nil {
+		return 0, err
+	}
+	if done > 0 {
+		return 0, nil
+	}
+
+	weekly := decimal.RequireFromString(h.weekly)
+	cost := decimal.RequireFromString(h.unitCost)
+	posted := 0
+	for month := 0; month < 12; month++ {
+		receivedAt := start.AddDate(0, month, 0)
+		if err := postPast(ctx, q, "IN", productID, locationID, weekly.Mul(decimal.NewFromInt(4)), cost, pastReceipt, receivedAt); err != nil {
+			return 0, err
+		}
+		posted++
+		for week := 0; week < 4; week++ {
+			soldAt := receivedAt.AddDate(0, 0, 2+7*week)
+			if err := postPast(ctx, q, "OUT", productID, locationID, weekly, cost, pastSale, soldAt); err != nil {
+				return 0, err
+			}
+			posted++
+		}
+	}
+	return posted, nil
+}
+
+func postPast(ctx context.Context, q *sqlc.Queries, movementType string, productID, locationID int64, quantity, cost decimal.Decimal, reference string, at time.Time) error {
+	row := sqlc.CreateBackdatedMovementParams{
+		ProductID:    productID,
+		MovementType: movementType,
+		Quantity:     quantity,
+		UnitCost:     &cost,
+		Reference:    reference,
+		CreatedBy:    createdBy,
+		CreatedAt:    at,
+	}
+	delta := quantity
+	if movementType == "IN" {
+		row.ToLocationID = &locationID
+	} else {
+		row.FromLocationID = &locationID
+		delta = quantity.Neg()
+	}
+
+	movement, err := q.CreateBackdatedMovement(ctx, row)
+	if err != nil {
+		return err
+	}
+	return q.CreateBackdatedMovementEntry(ctx, sqlc.CreateBackdatedMovementEntryParams{
+		MovementID:    movement.ID,
+		ProductID:     productID,
+		LocationID:    locationID,
+		QuantityDelta: delta,
+		UnitCost:      &cost,
+		CreatedAt:     at,
+	})
 }
 
 func binCapacity(n int64) *int64 {
