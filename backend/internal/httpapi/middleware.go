@@ -17,15 +17,19 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
-// Logger prints one line per request.
+// Logger gives every request an id, returns it in X-Request-ID and prints one line per request.
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		id := newRequestID(r)
+		w.Header().Set("X-Request-ID", id)
+		r = withRequestID(r, id)
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 
 		next.ServeHTTP(rec, r)
 
 		slog.Info("request",
+			"request_id", id,
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rec.status,
@@ -39,7 +43,7 @@ func Recover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				slog.Error("panic", "error", err, "path", r.URL.Path)
+				slog.Error("panic", "request_id", requestID(r), "error", err, "path", r.URL.Path)
 				writeErrorBody(w, http.StatusInternalServerError, errorBody{Code: "INTERNAL", Message: "internal server error"})
 			}
 		}()

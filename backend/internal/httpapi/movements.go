@@ -116,9 +116,9 @@ func toMovementDetailJSON(d sqlc.GetMovementDetailRow) movementDetailJSON {
 	}
 }
 
-func writeMovement(w http.ResponseWriter, r *http.Request, movement sqlc.Movement, replayed bool, err error) {
+func writeMovement(w http.ResponseWriter, r *http.Request, movement sqlc.Movement, replayed bool, err error, fields ...any) {
 	if err != nil {
-		writeError(w, r, err)
+		writeError(w, r, err, fields...)
 		return
 	}
 	if replayed {
@@ -126,7 +126,7 @@ func writeMovement(w http.ResponseWriter, r *http.Request, movement sqlc.Movemen
 		writeJSON(w, http.StatusOK, toMovementJSON(movement))
 		return
 	}
-	slog.Info("movement posted", "movement_id", movement.ID, "type", movement.MovementType, "product_id", movement.ProductID)
+	slog.Info("movement posted", "request_id", requestID(r), "movement_id", movement.ID, "type", movement.MovementType, "product_id", movement.ProductID)
 	writeJSON(w, http.StatusCreated, toMovementJSON(movement))
 }
 
@@ -143,7 +143,8 @@ func (s *Server) receiveStock(w http.ResponseWriter, r *http.Request) {
 	}
 	req.IdempotencyKey = key
 	movement, replayed, err := s.ledger.Receive(r.Context(), req)
-	writeMovement(w, r, movement, replayed, err)
+	writeMovement(w, r, movement, replayed, err,
+		"product_id", req.ProductID, "location_id", req.LocationID, "quantity", req.Quantity)
 }
 
 func (s *Server) shipStock(w http.ResponseWriter, r *http.Request) {
@@ -159,7 +160,8 @@ func (s *Server) shipStock(w http.ResponseWriter, r *http.Request) {
 	}
 	req.IdempotencyKey = key
 	movement, replayed, err := s.ledger.Ship(r.Context(), req)
-	writeMovement(w, r, movement, replayed, err)
+	writeMovement(w, r, movement, replayed, err,
+		"product_id", req.ProductID, "location_id", req.LocationID, "quantity", req.Quantity)
 }
 
 func (s *Server) transferStock(w http.ResponseWriter, r *http.Request) {
@@ -175,7 +177,8 @@ func (s *Server) transferStock(w http.ResponseWriter, r *http.Request) {
 	}
 	req.IdempotencyKey = key
 	movement, replayed, err := s.ledger.Transfer(r.Context(), req)
-	writeMovement(w, r, movement, replayed, err)
+	writeMovement(w, r, movement, replayed, err,
+		"product_id", req.ProductID, "from_location_id", req.FromLocationID, "to_location_id", req.ToLocationID, "quantity", req.Quantity)
 }
 
 func (s *Server) adjustStock(w http.ResponseWriter, r *http.Request) {
@@ -191,7 +194,8 @@ func (s *Server) adjustStock(w http.ResponseWriter, r *http.Request) {
 	}
 	req.IdempotencyKey = key
 	movement, replayed, err := s.ledger.Adjust(r.Context(), req)
-	writeMovement(w, r, movement, replayed, err)
+	writeMovement(w, r, movement, replayed, err,
+		"product_id", req.ProductID, "location_id", req.LocationID, "quantity", req.Quantity, "reason", req.Reason)
 }
 
 func (s *Server) reverseMovement(w http.ResponseWriter, r *http.Request) {
@@ -212,7 +216,7 @@ func (s *Server) reverseMovement(w http.ResponseWriter, r *http.Request) {
 	}
 	req.IdempotencyKey = key
 	movement, replayed, err := s.ledger.Reverse(r.Context(), id, req)
-	writeMovement(w, r, movement, replayed, err)
+	writeMovement(w, r, movement, replayed, err, "movement_id", id)
 }
 
 func (s *Server) stockTake(w http.ResponseWriter, r *http.Request) {
@@ -223,7 +227,7 @@ func (s *Server) stockTake(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := s.ledger.StockTake(r.Context(), req)
 	if err != nil {
-		writeError(w, r, err)
+		writeError(w, r, err, "location_id", req.LocationID, "lines", len(req.Counts))
 		return
 	}
 	adjustments := []movementJSON{}

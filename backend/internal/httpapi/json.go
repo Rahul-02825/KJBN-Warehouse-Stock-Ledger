@@ -33,7 +33,7 @@ func writeErrorBody(w http.ResponseWriter, status int, body errorBody) {
 	writeJSON(w, status, map[string]errorBody{"error": body})
 }
 
-func writeError(w http.ResponseWriter, r *http.Request, err error) {
+func writeError(w http.ResponseWriter, r *http.Request, err error, fields ...any) {
 	var badRequest badRequestError
 	var validation domain.ValidationError
 	var notFound domain.NotFoundError
@@ -70,11 +70,16 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	case postgres.IsNumericOverflow(err):
 		writeErrorBody(w, http.StatusBadRequest, errorBody{Code: "OUT_OF_RANGE", Message: "a resulting quantity or value is too large"})
 	default:
-		slog.Error("internal error", "error", err.Error())
+		slog.Error("internal error", logFields(r, err, fields)...)
 		writeErrorBody(w, http.StatusInternalServerError, errorBody{Code: "INTERNAL", Message: "internal server error"})
 		return
 	}
-	slog.Warn("request rejected", "path", r.URL.Path, "reason", err.Error())
+	slog.Warn("request rejected", logFields(r, err, fields)...)
+}
+
+func logFields(r *http.Request, err error, fields []any) []any {
+	all := []any{"request_id", requestID(r), "path", r.URL.Path, "reason", err.Error()}
+	return append(all, fields...)
 }
 
 func readJSON(w http.ResponseWriter, r *http.Request, dst any) error {

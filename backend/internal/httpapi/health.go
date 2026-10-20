@@ -12,7 +12,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := s.pool.Ping(ctx); err != nil {
-		slog.Error("health check failed", "error", err.Error())
+		slog.Error("health check failed", "request_id", requestID(r), "error", err.Error())
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
 		return
 	}

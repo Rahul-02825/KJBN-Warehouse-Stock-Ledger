@@ -6,6 +6,8 @@ info:
     Every stock change is an immutable movement with ledger entries. Balances are a
     cache of the ledger. Decimals are returned as strings; requests accept strings or numbers.
     Errors use `{"error": {"code", "message", "fields"?, "details"?}}`.
+    Every response carries an `X-Request-ID` header, and the same id is on every server log line for that
+    request. Send your own `X-Request-ID` (letters, digits, `-`, `_`, `.`, up to 64 characters) to reuse it.
 servers:
   - url: /
 tags:

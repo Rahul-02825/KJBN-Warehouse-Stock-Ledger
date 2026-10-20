@@ -58,7 +58,7 @@ func (s *Server) previewPlacement(w http.ResponseWriter, r *http.Request) {
 	}
 	preview, err := s.ledger.PreviewPlacement(r.Context(), req)
 	if err != nil {
-		writeError(w, r, err)
+		writeError(w, r, err, "product_id", req.ProductID, "location_id", req.LocationID, "quantity", req.Quantity)
 		return
 	}
 	writeJSON(w, http.StatusOK, toPreviewJSON(preview))
@@ -72,7 +72,7 @@ func (s *Server) previewPick(w http.ResponseWriter, r *http.Request) {
 	}
 	preview, err := s.ledger.PreviewPick(r.Context(), req)
 	if err != nil {
-		writeError(w, r, err)
+		writeError(w, r, err, "product_id", req.ProductID, "location_id", req.LocationID, "quantity", req.Quantity)
 		return
 	}
 	writeJSON(w, http.StatusOK, toPreviewJSON(preview))
