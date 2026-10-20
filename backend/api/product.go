@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
@@ -59,10 +58,10 @@ func toProductResponse(p sqlc.Product) productResponse {
 		SKU:          p.Sku,
 		Name:         p.Name,
 		Unit:         p.Unit,
-		ReorderLevel: toDecimal(p.ReorderLevel),
-		AverageCost:  toDecimal(p.AverageCost),
-		CreatedAt:    p.CreatedAt.Time.UTC(),
-		UpdatedAt:    p.UpdatedAt.Time.UTC(),
+		ReorderLevel: p.ReorderLevel,
+		AverageCost:  p.AverageCost,
+		CreatedAt:    p.CreatedAt.UTC(),
+		UpdatedAt:    p.UpdatedAt.UTC(),
 	}
 }
 
@@ -96,7 +95,7 @@ func (h *ProductHandler) create(w http.ResponseWriter, r *http.Request) {
 		Sku:          req.SKU,
 		Name:         req.Name,
 		Unit:         req.Unit,
-		ReorderLevel: toNumeric(req.ReorderLevel),
+		ReorderLevel: req.ReorderLevel,
 	})
 	if isUniqueViolation(err) {
 		writeError(w, http.StatusConflict, "DUPLICATE", "a product with this sku already exists")
@@ -130,7 +129,7 @@ func (h *ProductHandler) list(w http.ResponseWriter, r *http.Request) {
 	page, size := pageParams(r.URL.Query().Get("page"), r.URL.Query().Get("page_size"))
 
 	searchText := strings.TrimSpace(r.URL.Query().Get("search"))
-	search := pgtype.Text{String: searchText, Valid: searchText != ""}
+	search := nilIfEmpty(searchText)
 
 	rows, err := h.q.ListProducts(r.Context(), sqlc.ListProductsParams{
 		Search:     search,
@@ -191,13 +190,13 @@ func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request) {
 		if name == "" || len(name) > 200 {
 			fields["name"] = "must not be blank, max 200 characters"
 		}
-		params.Name = pgtype.Text{String: name, Valid: true}
+		params.Name = &name
 	}
 	if req.ReorderLevel != nil {
 		if msg := domain.CheckReorderLevel(*req.ReorderLevel, current.Unit); msg != "" {
 			fields["reorder_level"] = msg
 		}
-		params.ReorderLevel = toNumeric(*req.ReorderLevel)
+		params.ReorderLevel = req.ReorderLevel
 	}
 	if len(fields) > 0 {
 		writeValidationError(w, fields)

@@ -48,7 +48,7 @@ func (h *WarehouseHandler) list(w http.ResponseWriter, r *http.Request) {
 	for i, row := range rows {
 		data[i] = warehouseResponse{
 			ID: row.ID, Code: row.Code, Name: row.Name, X: row.X, Y: row.Y,
-			RadiusM: row.RadiusM, Capacity: idPtr(row.Capacity), Used: toDecimal(row.Used),
+			RadiusM: row.RadiusM, Capacity: row.Capacity, Used: row.Used,
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})

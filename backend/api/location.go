@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
 	"github.com/Rahul-02825/KJBN-Warehouse-Stock-Ledger/backend/internal/domain"
@@ -59,9 +58,9 @@ func toLocationResponse(l sqlc.Location) locationResponse {
 		WarehouseID: l.WarehouseID,
 		X:           l.X,
 		Y:           l.Y,
-		Capacity:    idPtr(l.Capacity),
+		Capacity:    l.Capacity,
 		AutoPlace:   l.AutoPlace,
-		CreatedAt:   l.CreatedAt.Time.UTC(),
+		CreatedAt:   l.CreatedAt.UTC(),
 	}
 }
 
@@ -109,7 +108,7 @@ func (h *LocationHandler) create(w http.ResponseWriter, r *http.Request) {
 		WarehouseID: warehouse.ID,
 		X:           req.X,
 		Y:           req.Y,
-		Capacity:    optCapacity(req.Capacity),
+		Capacity:    req.Capacity,
 		AutoPlace:   req.AutoPlace == nil || *req.AutoPlace,
 	})
 	if isUniqueViolation(err) {
@@ -142,7 +141,7 @@ func (h *LocationHandler) list(w http.ResponseWriter, r *http.Request) {
 			ID: row.ID, Code: row.Code, Description: row.Description, CreatedAt: row.CreatedAt,
 			WarehouseID: row.WarehouseID, X: row.X, Y: row.Y, Capacity: row.Capacity, AutoPlace: row.AutoPlace,
 		})
-		used := toDecimal(row.Used)
+		used := row.Used
 		data[i].Used = &used
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})
@@ -165,13 +164,6 @@ func (h *LocationHandler) get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toLocationResponse(location))
 }
 
-func optCapacity(capacity *int64) pgtype.Int8 {
-	if capacity == nil {
-		return pgtype.Int8{}
-	}
-	return pgtype.Int8{Int64: *capacity, Valid: true}
-}
-
 func siteOf(w sqlc.Warehouse) domain.Site {
-	return domain.Site{Center: domain.Point{X: w.X, Y: w.Y}, RadiusM: w.RadiusM, Capacity: idPtr(w.Capacity)}
+	return domain.Site{Center: domain.Point{X: w.X, Y: w.Y}, RadiusM: w.RadiusM, Capacity: w.Capacity}
 }

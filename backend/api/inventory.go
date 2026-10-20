@@ -57,8 +57,8 @@ func (h *InventoryHandler) grid(w http.ResponseWriter, r *http.Request) {
 			Unit:         c.Unit,
 			LocationID:   c.LocationID,
 			LocationCode: c.LocationCode,
-			Quantity:     toDecimal(c.Quantity),
-			AverageCost:  toDecimal(c.AverageCost),
+			Quantity:     c.Quantity,
+			AverageCost:  c.AverageCost,
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})
@@ -73,7 +73,7 @@ func (h *InventoryHandler) cell(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	c, err := h.q.GetStockBalance(r.Context(), sqlc.GetStockBalanceParams{ID: productID, ID_2: locationID})
+	c, err := h.q.GetStockBalance(r.Context(), sqlc.GetStockBalanceParams{ProductID: productID, LocationID: locationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "product or location not found")
 		return
@@ -89,8 +89,8 @@ func (h *InventoryHandler) cell(w http.ResponseWriter, r *http.Request) {
 		Unit:         c.Unit,
 		LocationID:   c.LocationID,
 		LocationCode: c.LocationCode,
-		Quantity:     toDecimal(c.Quantity),
-		AverageCost:  toDecimal(c.AverageCost),
+		Quantity:     c.Quantity,
+		AverageCost:  c.AverageCost,
 	})
 }
 
@@ -124,13 +124,13 @@ func (h *InventoryHandler) byProduct(w http.ResponseWriter, r *http.Request) {
 	total := decimal.Zero
 	data := make([]productBalance, len(rows))
 	for i, b := range rows {
-		qty := toDecimal(b.Quantity)
+		qty := b.Quantity
 		total = total.Add(qty)
 		data[i] = productBalance{
 			LocationID:   b.LocationID,
 			LocationCode: b.LocationCode,
 			Quantity:     qty,
-			UpdatedAt:    b.UpdatedAt.Time.UTC(),
+			UpdatedAt:    b.UpdatedAt.UTC(),
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -179,9 +179,9 @@ func (h *InventoryHandler) byLocation(w http.ResponseWriter, r *http.Request) {
 			SKU:         b.Sku,
 			ProductName: b.ProductName,
 			Unit:        b.Unit,
-			Quantity:    toDecimal(b.Quantity),
-			AverageCost: toDecimal(b.AverageCost),
-			UpdatedAt:   b.UpdatedAt.Time.UTC(),
+			Quantity:    b.Quantity,
+			AverageCost: b.AverageCost,
+			UpdatedAt:   b.UpdatedAt.UTC(),
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -218,7 +218,7 @@ func (h *InventoryHandler) asOf(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.q.ListStockAsOf(r.Context(), sqlc.ListStockAsOfParams{
-		AsOf: at, ProductID: productID, LocationID: locationID,
+		AsOf: *at, ProductID: productID, LocationID: locationID,
 	})
 	if err != nil {
 		writeInternalError(w, err)
@@ -233,8 +233,8 @@ func (h *InventoryHandler) asOf(w http.ResponseWriter, r *http.Request) {
 			Unit:         c.Unit,
 			LocationID:   c.LocationID,
 			LocationCode: c.LocationCode,
-			Quantity:     toDecimal(c.Quantity),
+			Quantity:     c.Quantity,
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"as_of": at.Time.UTC(), "data": data})
+	writeJSON(w, http.StatusOK, map[string]any{"as_of": at.UTC(), "data": data})
 }

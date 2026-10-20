@@ -7,8 +7,9 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
 const getDailyActivity = `-- name: GetDailyActivity :many
@@ -35,14 +36,14 @@ ORDER BY d.day
 `
 
 type GetDailyActivityRow struct {
-	Day             pgtype.Date    `json:"day"`
-	InCount         int64          `json:"in_count"`
-	OutCount        int64          `json:"out_count"`
-	TransferCount   int64          `json:"transfer_count"`
-	AdjustmentCount int64          `json:"adjustment_count"`
-	ReversalCount   int64          `json:"reversal_count"`
-	InValue         pgtype.Numeric `json:"in_value"`
-	OutValue        pgtype.Numeric `json:"out_value"`
+	Day             time.Time       `json:"day"`
+	InCount         int64           `json:"in_count"`
+	OutCount        int64           `json:"out_count"`
+	TransferCount   int64           `json:"transfer_count"`
+	AdjustmentCount int64           `json:"adjustment_count"`
+	ReversalCount   int64           `json:"reversal_count"`
+	InValue         decimal.Decimal `json:"in_value"`
+	OutValue        decimal.Decimal `json:"out_value"`
 }
 
 // Postings per day (Indian Standard Time) for the last N days, including days with none.
@@ -91,13 +92,13 @@ ORDER BY p.name, p.id
 `
 
 type GetInventoryValuationRow struct {
-	ProductID     int64          `json:"product_id"`
-	Sku           string         `json:"sku"`
-	Name          string         `json:"name"`
-	Unit          string         `json:"unit"`
-	TotalQuantity pgtype.Numeric `json:"total_quantity"`
-	AverageCost   pgtype.Numeric `json:"average_cost"`
-	TotalValue    pgtype.Numeric `json:"total_value"`
+	ProductID     int64           `json:"product_id"`
+	Sku           string          `json:"sku"`
+	Name          string          `json:"name"`
+	Unit          string          `json:"unit"`
+	TotalQuantity decimal.Decimal `json:"total_quantity"`
+	AverageCost   decimal.Decimal `json:"average_cost"`
+	TotalValue    decimal.Decimal `json:"total_value"`
 }
 
 // Quantity x average cost per product.
@@ -146,13 +147,13 @@ ORDER BY shortfall DESC, p.name
 `
 
 type ListLowStockProductsRow struct {
-	ProductID     int64          `json:"product_id"`
-	Sku           string         `json:"sku"`
-	Name          string         `json:"name"`
-	Unit          string         `json:"unit"`
-	ReorderLevel  pgtype.Numeric `json:"reorder_level"`
-	TotalQuantity pgtype.Numeric `json:"total_quantity"`
-	Shortfall     pgtype.Numeric `json:"shortfall"`
+	ProductID     int64           `json:"product_id"`
+	Sku           string          `json:"sku"`
+	Name          string          `json:"name"`
+	Unit          string          `json:"unit"`
+	ReorderLevel  decimal.Decimal `json:"reorder_level"`
+	TotalQuantity decimal.Decimal `json:"total_quantity"`
+	Shortfall     decimal.Decimal `json:"shortfall"`
 }
 
 // Products whose total cached balance is at or below their reorder level.
@@ -223,14 +224,14 @@ ORDER BY (COALESCE(sb.quantity, 0) <> COALESCE(lt.ledger_quantity, 0)) DESC,
 `
 
 type ListReconciliationRow struct {
-	ProductID      int64          `json:"product_id"`
-	Sku            string         `json:"sku"`
-	ProductName    string         `json:"product_name"`
-	LocationID     int64          `json:"location_id"`
-	LocationCode   string         `json:"location_code"`
-	CachedQuantity pgtype.Numeric `json:"cached_quantity"`
-	LedgerQuantity pgtype.Numeric `json:"ledger_quantity"`
-	Difference     pgtype.Numeric `json:"difference"`
+	ProductID      int64           `json:"product_id"`
+	Sku            string          `json:"sku"`
+	ProductName    string          `json:"product_name"`
+	LocationID     int64           `json:"location_id"`
+	LocationCode   string          `json:"location_code"`
+	CachedQuantity decimal.Decimal `json:"cached_quantity"`
+	LedgerQuantity decimal.Decimal `json:"ledger_quantity"`
+	Difference     decimal.Decimal `json:"difference"`
 }
 
 // Reconciliation: recompute every (product, location) balance from the ledger
@@ -297,20 +298,20 @@ ORDER BY gap_value DESC, gap DESC, p.name
 `
 
 type ListSeasonForecastParams struct {
-	WindowStart pgtype.Timestamptz `json:"window_start"`
-	WindowEnd   pgtype.Timestamptz `json:"window_end"`
+	WindowStart time.Time `json:"window_start"`
+	WindowEnd   time.Time `json:"window_end"`
 }
 
 type ListSeasonForecastRow struct {
-	ProductID      int64          `json:"product_id"`
-	Sku            string         `json:"sku"`
-	Name           string         `json:"name"`
-	Unit           string         `json:"unit"`
-	LastYearDemand pgtype.Numeric `json:"last_year_demand"`
-	CurrentStock   pgtype.Numeric `json:"current_stock"`
-	Gap            pgtype.Numeric `json:"gap"`
-	AverageCost    pgtype.Numeric `json:"average_cost"`
-	GapValue       pgtype.Numeric `json:"gap_value"`
+	ProductID      int64           `json:"product_id"`
+	Sku            string          `json:"sku"`
+	Name           string          `json:"name"`
+	Unit           string          `json:"unit"`
+	LastYearDemand decimal.Decimal `json:"last_year_demand"`
+	CurrentStock   decimal.Decimal `json:"current_stock"`
+	Gap            decimal.Decimal `json:"gap"`
+	AverageCost    decimal.Decimal `json:"average_cost"`
+	GapValue       decimal.Decimal `json:"gap_value"`
 }
 
 // Products whose current stock is below what was shipped in the same window last year.
@@ -365,18 +366,18 @@ LIMIT $2
 `
 
 type ListTopMoversParams struct {
-	Since   pgtype.Timestamptz `json:"since"`
-	MaxRows int32              `json:"max_rows"`
+	Since   time.Time `json:"since"`
+	MaxRows int32     `json:"max_rows"`
 }
 
 type ListTopMoversRow struct {
-	ProductID       int64          `json:"product_id"`
-	Sku             string         `json:"sku"`
-	Name            string         `json:"name"`
-	Unit            string         `json:"unit"`
-	Shipments       int64          `json:"shipments"`
-	ShippedQuantity pgtype.Numeric `json:"shipped_quantity"`
-	ShippedValue    pgtype.Numeric `json:"shipped_value"`
+	ProductID       int64           `json:"product_id"`
+	Sku             string          `json:"sku"`
+	Name            string          `json:"name"`
+	Unit            string          `json:"unit"`
+	Shipments       int64           `json:"shipments"`
+	ShippedQuantity decimal.Decimal `json:"shipped_quantity"`
+	ShippedValue    decimal.Decimal `json:"shipped_value"`
 }
 
 // Products ranked by value shipped since a time. Reversed shipments are left out.
