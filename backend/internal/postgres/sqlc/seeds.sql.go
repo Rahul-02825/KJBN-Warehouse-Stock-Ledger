@@ -34,6 +34,26 @@ func (q *Queries) CountProductMovementsWithReference(ctx context.Context, arg Co
 	return count, err
 }
 
+const countProductReceiptsExcludingReference = `-- name: CountProductReceiptsExcludingReference :one
+SELECT COUNT(*)
+FROM movements
+WHERE product_id = $1
+  AND movement_type = 'IN'
+  AND reference <> $2
+`
+
+type CountProductReceiptsExcludingReferenceParams struct {
+	ProductID int64  `json:"product_id"`
+	Reference string `json:"reference"`
+}
+
+func (q *Queries) CountProductReceiptsExcludingReference(ctx context.Context, arg CountProductReceiptsExcludingReferenceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countProductReceiptsExcludingReference, arg.ProductID, arg.Reference)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createBackdatedMovement = `-- name: CreateBackdatedMovement :one
 INSERT INTO movements (
     product_id,

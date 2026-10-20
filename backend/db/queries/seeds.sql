@@ -32,3 +32,10 @@ INSERT INTO movement_entries (
     created_at
 )
 VALUES ($1, $2, $3, $4, $5, $6);
+
+-- name: CountProductReceiptsExcludingReference :one
+SELECT COUNT(*)
+FROM movements
+WHERE product_id = $1
+  AND movement_type = 'IN'
+  AND reference <> $2;

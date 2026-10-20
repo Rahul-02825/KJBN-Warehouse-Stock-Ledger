@@ -16,6 +16,7 @@ type Querier interface {
 	// Used only by cmd/seed to record fictional trading history with past dates.
 	// Normal postings always take created_at from NOW().
 	CountProductMovementsWithReference(ctx context.Context, arg CountProductMovementsWithReferenceParams) (int64, error)
+	CountProductReceiptsExcludingReference(ctx context.Context, arg CountProductReceiptsExcludingReferenceParams) (int64, error)
 	CountProducts(ctx context.Context, search *string) (int64, error)
 	CreateBackdatedMovement(ctx context.Context, arg CreateBackdatedMovementParams) (Movement, error)
 	CreateBackdatedMovementEntry(ctx context.Context, arg CreateBackdatedMovementEntryParams) error

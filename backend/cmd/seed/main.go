@@ -240,12 +240,12 @@ func postHistory(ctx context.Context, q *sqlc.Queries, productID, locationID int
 	if err != nil {
 		return 0, err
 	}
+	cost := decimal.RequireFromString(h.unitCost)
 	if done > 0 {
-		return 0, nil
+		return 0, keepHistoryAverage(ctx, q, productID, cost)
 	}
 
 	weekly := decimal.RequireFromString(h.weekly)
-	cost := decimal.RequireFromString(h.unitCost)
 	posted := 0
 	for month := 0; month < 12; month++ {
 		receivedAt := start.AddDate(0, month, 0)
@@ -261,7 +261,19 @@ func postHistory(ctx context.Context, q *sqlc.Queries, productID, locationID int
 			posted++
 		}
 	}
-	return posted, nil
+	return posted, keepHistoryAverage(ctx, q, productID, cost)
+}
+
+func keepHistoryAverage(ctx context.Context, q *sqlc.Queries, productID int64, cost decimal.Decimal) error {
+	receipts, err := q.CountProductReceiptsExcludingReference(ctx, sqlc.CountProductReceiptsExcludingReferenceParams{
+		ProductID: productID,
+		Reference: pastReceipt,
+	})
+	if err != nil || receipts > 0 {
+		return err
+	}
+	_, err = q.UpdateProductAverageCost(ctx, sqlc.UpdateProductAverageCostParams{ID: productID, AverageCost: cost})
+	return err
 }
 
 func postPast(ctx context.Context, q *sqlc.Queries, movementType string, productID, locationID int64, quantity, cost decimal.Decimal, reference string, at time.Time) error {
