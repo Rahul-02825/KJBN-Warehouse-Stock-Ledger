@@ -16,3 +16,7 @@ CLAUDE.md
 docs/design.md
 *.pdf
 *.docx
+skills-lock.json
+.claude/
+.playwright-mcp/
+prompts.json
