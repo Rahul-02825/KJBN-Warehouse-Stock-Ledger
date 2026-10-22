@@ -49,7 +49,7 @@ All four go through `writeError`, so errors share one shape and stack traces nev
 | M3 API | 2026-10-19 | `0492107` |
 | M4 UI | 2026-10-20 | `a3b9646` |
 | M5 Deployment | 2026-10-20 | `231efe6` |
-| M6 Documentation | Pending | tagged `v1.0` at submission |
+| M6 Documentation | 2026-10-21 | `264af66` (tagged `v1.0`) |
 
 ## F. If I had two more days
 
