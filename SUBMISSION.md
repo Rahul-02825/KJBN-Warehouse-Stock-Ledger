@@ -48,8 +48,8 @@ All four go through `writeError`, so errors share one shape and stack traces nev
 | M2 Business rules | 2026-10-17 | `2ac2748` |
 | M3 API | 2026-10-19 | `0492107` |
 | M4 UI | 2026-10-20 | `a3b9646` |
-| M5 Deployment | 2026-10-20 | `231efe6` |
-| M6 Documentation | 2026-10-21 | `264af66` (tagged `v1.0`) |
+| M5 Deployment | 2026-10-20 | `0f04473` |
+| M6 Documentation | 2026-10-21 | `8e90b9a` (`v1.0` is `bafae0e`) |
 
 ## F. If I had two more days
 
@@ -70,5 +70,5 @@ All four go through `writeError`, so errors share one shape and stack traces nev
 | UI usability | 5 | Every core flow works without instructions, with loading and error states and messages that say what went wrong |
 | Testing | 4 | One command runs unit and API tests against a real database, with a committed coverage report above the 80% target |
 | Deployment and operability | 5 | One-command compose, migrate and seed scripts, CI on every push, committed Render and Vercel config, and no secrets in the repo |
-| Git hygiene | 5 | Milestone-tagged, conventional commits throughout. A few messages could have been more consistent |
+| Git hygiene | 4 | Milestone-tagged, conventional commits throughout. A few messages could have been more consistent |
 | Documentation and write-up | 5 | The README follows the required structure and runs on a clean machine, with assumptions and limitations written down |
