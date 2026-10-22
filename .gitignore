@@ -20,3 +20,4 @@ skills-lock.json
 .claude/
 .playwright-mcp/
 prompts.json
+*.txt

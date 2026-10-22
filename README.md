@@ -1,5 +1,7 @@
 # Warehouse Stock Ledger
 
+## 1.Title
+
 Warehouse Stock Ledger, Problem 3. Tracks stock across warehouse bins where every change is recorded as a movement (IN, OUT, TRANSFER, ADJUSTMENT, REVERSAL), so any balance can be traced back to the movements that produced it.
 
 ## 2. Live links

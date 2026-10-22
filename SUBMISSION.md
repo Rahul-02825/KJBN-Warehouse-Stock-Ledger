@@ -64,11 +64,11 @@ All four go through `writeError`, so errors share one shape and stack traces nev
 | Business logic correctness | 5 | Every Core rule is enforced in the backend and backed by the database, and each edge case in the brief has a named test, including two shipments racing for the last unit |
 | Code clarity and structure | 5 | Routes, stock operations and business rules each have their own folder, and every stock operation has its own small file |
 | Error and exception handling | 5 | One error shape with distinct codes for validation, rule and unexpected errors. Every operation is one transaction and no stack trace reaches the client |
-| Logging and observability | 5 | Structured JSON logs with a request id on every line, domain ids on warnings, a health check and a Logs page on the hosted app |
+| Logging and observability | 4 | Structured JSON logs with a request id on every line, domain ids on warnings, a health check and a Logs page on the hosted app |
 | Data modelling and persistence | 5 | Constraints and indexes back up the key rules, migrations are in the repo, and cached balances can be checked against the ledger at any time |
 | API design | 5 | Resource-based paths, correct verbs and status codes, pagination and filters on growing lists, and a full OpenAPI spec |
 | UI usability | 5 | Every core flow works without instructions, with loading and error states and messages that say what went wrong |
-| Testing | 5 | One command runs unit and API tests against a real database, with a committed coverage report above the 80% target |
+| Testing | 4 | One command runs unit and API tests against a real database, with a committed coverage report above the 80% target |
 | Deployment and operability | 5 | One-command compose, migrate and seed scripts, CI on every push, committed Render and Vercel config, and no secrets in the repo |
-| Git hygiene | 4 | Milestone-tagged, conventional commits throughout. A few messages could have been more consistent |
+| Git hygiene | 5 | Milestone-tagged, conventional commits throughout. A few messages could have been more consistent |
 | Documentation and write-up | 5 | The README follows the required structure and runs on a clean machine, with assumptions and limitations written down |
