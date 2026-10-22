@@ -1,6 +1,8 @@
 # Warehouse Stock Ledger
 
-## 1.Title
+**Contents:** [1 Title](#1-title) · [2 Live links](#2-live-links) · [3 Tech stack](#3-tech-stack) · [4 Architecture](#4-architecture) · [5 Running locally](#5-running-locally) · [5a Deployment](#5a-deployment) · [6 Tests and coverage](#6-running-tests-and-coverage) · [7 API](#7-api-overview) · [8 Business rules](#8-business-rules-and-assumptions) · [9 Errors and logging](#9-error-handling-and-logging) · [10 Reviewer aids](#10-reviewer-aids) · [11 Limitations](#11-known-limitations) · [12 AI usage](#12-ai-and-third-party-usage)
+
+## 1. Title
 
 Warehouse Stock Ledger, Problem 3. Tracks stock across warehouse bins where every change is recorded as a movement (IN, OUT, TRANSFER, ADJUSTMENT, REVERSAL), so any balance can be traced back to the movements that produced it.
 
@@ -15,6 +17,48 @@ Warehouse Stock Ledger, Problem 3. Tracks stock across warehouse bins where ever
 - The hosted database is already seeded.
 - The API runs on Render's free tier and sleeps after about 15 minutes idle. The first request can take 30 to 60 seconds. If the UI says it can't reach the API, wait and reload.
 - There is no login, so no credentials are needed.
+
+### Screenshots
+
+Taken from the hosted app with the seed data. They follow the order a reviewer would test the app in.
+
+**Dashboard and stock**
+
+| Dashboard | Stock overview |
+|---|---|
+| ![Dashboard with inventory value, low-stock alerts and activity](docs/screenshots/dashboard.png) | ![Every product in every bin with average cost and value](docs/screenshots/stock-overview.png) |
+
+**Catalogue**
+
+| Products | Bins |
+|---|---|
+| ![Product list](docs/screenshots/products.png) | ![Warehouse bins](docs/screenshots/bins.png) |
+
+**Recording movements**
+
+| Receive (IN) | Ship (OUT) |
+|---|---|
+| ![Receive stock form with unit cost](docs/screenshots/receive-stock.png) | ![Ship stock form](docs/screenshots/ship-stock.png) |
+
+| Transfer | Adjustment |
+|---|---|
+| ![Transfer stock between bins](docs/screenshots/transfer-stock.png) | ![Adjustment with a required reason](docs/screenshots/adjust-stock.png) |
+
+**History and audit trail**
+
+| Movement history | Product ledger |
+|---|---|
+| ![Movement history with filters, reversed and reversal rows](docs/screenshots/movement-history.png) | ![Product ledger with per-bin running balances](docs/screenshots/product-ledger.png) |
+
+**Reports**
+
+| Low stock | Inventory valuation |
+|---|---|
+| ![Products at or below reorder level](docs/screenshots/low-stock.png) | ![Quantity on hand times weighted-average cost](docs/screenshots/valuation.png) |
+
+| Reconciliation | Cost check |
+|---|---|
+| ![Cached balances compared with the ledger](docs/screenshots/reconciliation.png) | ![Stored average cost compared with a replay of history](docs/screenshots/cost-check.png) |
 
 ## 3. Tech stack
 
@@ -48,6 +92,79 @@ Database: Ledger, stock balances, products and bins
 | `frontend/` | React app |
 
 **Where the business rules live.** Simple checks like valid quantities and the average cost formula are in `domain`. Rules that need database locks like preventing negative stock are in `ledger`.
+
+### Data model
+
+```mermaid
+erDiagram
+    warehouses ||--o{ locations : contains
+    products ||--o{ movements : "is moved by"
+    locations |o--o{ movements : "from bin"
+    locations |o--o{ movements : "to bin"
+    movements ||--|{ movement_entries : "posts"
+    movements |o--o| movements : "reversed by"
+    products ||--o{ movement_entries : ""
+    locations ||--o{ movement_entries : ""
+    products ||--o{ stock_balances : ""
+    locations ||--o{ stock_balances : ""
+
+    warehouses {
+        bigint id PK
+        varchar code UK
+        varchar name
+        float radius_m
+        bigint capacity
+    }
+    locations {
+        bigint id PK
+        varchar code UK
+        bigint warehouse_id FK
+        text description
+        float x
+        float y
+        bigint capacity
+    }
+    products {
+        bigint id PK
+        varchar sku UK
+        varchar name
+        varchar unit "pcs, kg, litre"
+        numeric reorder_level
+        numeric average_cost
+    }
+    movements {
+        bigint id PK
+        bigint product_id FK
+        varchar movement_type "IN, OUT, TRANSFER, ADJUSTMENT, REVERSAL"
+        bigint from_location_id FK
+        bigint to_location_id FK
+        numeric quantity
+        numeric unit_cost
+        varchar reason
+        bigint reversal_of_id FK, UK
+        varchar idempotency_key UK
+        varchar created_by
+        timestamptz created_at
+    }
+    movement_entries {
+        bigint id PK
+        bigint movement_id FK
+        bigint product_id FK
+        bigint location_id FK
+        numeric quantity_delta "signed"
+        numeric unit_cost
+    }
+    stock_balances {
+        bigint product_id PK, FK
+        bigint location_id PK, FK
+        numeric quantity "never below 0"
+    }
+```
+
+- A movement is the business event. Its entries are the stock changes it causes: one for IN, OUT and ADJUSTMENT, two for TRANSFER.
+- `stock_balances` is a cache. Adding up `movement_entries` for a product and bin gives the true quantity, and reconciliation compares the two.
+- A reversal is a new movement that points to the original through `reversal_of_id`. That column is unique, so a movement can be reversed only once.
+- Movements and entries are never updated or deleted.
 
 ## 5. Running locally
 
