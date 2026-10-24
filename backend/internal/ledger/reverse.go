@@ -67,6 +67,13 @@ func (l *Ledger) reverse(ctx context.Context, movementID int64, req ReverseReque
 	if err != nil {
 		return sqlc.Movement{}, err
 	}
+	latestID, err := q.GetLatestActiveMovementID(ctx, product.ID)
+	if err != nil {
+		return sqlc.Movement{}, err
+	}
+	if latestID != original.ID {
+		return sqlc.Movement{}, domain.NotReversibleError{Reason: "only the latest movement of this product can be reversed; post an adjustment instead"}
+	}
 	entries, err := q.GetEntriesForReversal(ctx, original.ID)
 	if err != nil {
 		return sqlc.Movement{}, err

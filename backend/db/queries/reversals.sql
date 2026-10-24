@@ -24,3 +24,12 @@ SELECT
 FROM movement_entries
 WHERE movement_id = $1
 ORDER BY location_id, id;
+
+-- name: GetLatestActiveMovementID :one
+SELECT m.id
+FROM movements m
+WHERE m.product_id = $1
+  AND m.movement_type <> 'REVERSAL'
+  AND NOT EXISTS (SELECT 1 FROM movements r WHERE r.reversal_of_id = m.id)
+ORDER BY m.id DESC
+LIMIT 1;

@@ -35,6 +35,7 @@ type Querier interface {
 	GetEntriesForReversal(ctx context.Context, movementID int64) ([]GetEntriesForReversalRow, error)
 	// Quantity x average cost per product.
 	GetInventoryValuation(ctx context.Context) ([]GetInventoryValuationRow, error)
+	GetLatestActiveMovementID(ctx context.Context, productID int64) (int64, error)
 	// Ledger-derived total for a product. Used by costing consistency checks so
 	// that the average is never silently computed from a drifted cache.
 	GetLedgerProductTotalQuantity(ctx context.Context, productID int64) (decimal.Decimal, error)

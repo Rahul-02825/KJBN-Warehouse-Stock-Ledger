@@ -19,7 +19,7 @@ A warehouse stock ledger where stock is never edited directly. Every change is a
 - **Cost:** postings for the same product run one at a time, so a very busy product would slow down.
 
 **3. A reversal is a new movement, and it can only happen once**
-- **Decision:** a reversal is its own movement linked to the original with a unique `reversal_of_id`. A reversal can't be reversed, and incoming stock can't be reversed once it has been shipped.
+- **Decision:** a reversal is its own movement linked to the original with a unique `reversal_of_id`. A reversal can't be reversed, and only the latest movement of a product can be reversed.
 - **Alternative:** mark the original as cancelled, or allow reversing anything.
 - **Why:** history is never changed, and the unique constraint blocks two reversals of the same movement.
 - **Cost:** to fix a wrong reversal, a user has to post a new movement by hand.

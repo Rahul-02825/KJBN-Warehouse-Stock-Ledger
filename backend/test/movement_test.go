@@ -279,17 +279,43 @@ func TestReversal(t *testing.T) {
 	}
 }
 
-func TestReversal_RejectsNegativeResultingStock(t *testing.T) {
+func TestReversal_RejectsOlderMovement(t *testing.T) {
 	h, _ := setupWarehouse(t)
 	in := receive(t, h, 1, 1, "10", "100")
 	mustSend(t, h, 201, "POST", "/api/movements/out", `{"product_id":1,"location_id":1,"quantity":"8","created_by":"t"}`)
 
 	status, body := send(t, h, "POST", fmt.Sprintf("/api/movements/%v/reverse", in["id"]), `{"created_by":"t"}`)
-	if status != 409 || errorCode(body) != "INSUFFICIENT_STOCK" {
-		t.Fatalf("got %d %q, want 409 INSUFFICIENT_STOCK", status, errorCode(body))
+	if status != 409 || errorCode(body) != "NOT_REVERSIBLE" {
+		t.Fatalf("got %d %q, want 409 NOT_REVERSIBLE", status, errorCode(body))
 	}
 	if got := stockAt(t, h, 1, 1); got != "2" {
 		t.Errorf("stock = %s, want 2", got)
+	}
+}
+
+func TestReversal_OnlyLatestMovementOfProduct(t *testing.T) {
+	h, _ := setupWarehouse(t)
+	first := receive(t, h, 1, 1, "100", "100")
+	out := mustSend(t, h, 201, "POST", "/api/movements/out", `{"product_id":1,"location_id":1,"quantity":"100","created_by":"t"}`)
+	last := receive(t, h, 1, 1, "100", "150")
+	reverse := func(m map[string]any) (int, map[string]any) {
+		return send(t, h, "POST", fmt.Sprintf("/api/movements/%v/reverse", m["id"]), `{"created_by":"t"}`)
+	}
+
+	if status, body := reverse(first); status != 409 || errorCode(body) != "NOT_REVERSIBLE" {
+		t.Fatalf("reversing the first receipt: %d %q, want 409 NOT_REVERSIBLE", status, errorCode(body))
+	}
+	if got := stockAt(t, h, 1, 1); got != "100" {
+		t.Errorf("stock = %s after the refused reversal, want 100", got)
+	}
+
+	for _, m := range []map[string]any{last, out, first} {
+		if status, body := reverse(m); status != 201 {
+			t.Fatalf("reversing movement %v: %d %q, want 201", m["id"], status, errorCode(body))
+		}
+	}
+	if got := stockAt(t, h, 1, 1); got != "0" {
+		t.Errorf("stock = %s after undoing everything, want 0", got)
 	}
 }
 

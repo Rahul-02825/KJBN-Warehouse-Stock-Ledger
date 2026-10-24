@@ -163,7 +163,7 @@ erDiagram
 
 - A movement is the business event. Its entries are the stock changes it causes: one for IN, OUT and ADJUSTMENT, two for TRANSFER.
 - `stock_balances` is a cache. Adding up `movement_entries` for a product and bin gives the true quantity, and reconciliation compares the two.
-- A reversal is a new movement that points to the original through `reversal_of_id`. That column is unique, so a movement can be reversed only once.
+- A reversal is a new movement that points to the original through `reversal_of_id`. That column is unique, so a movement can be reversed only once. Only the latest movement of a product that hasn't been reversed can be reversed.
 - Movements and entries are never updated or deleted.
 
 ## 5. Running locally
@@ -314,7 +314,7 @@ Full spec in [`backend/internal/httpapi/openapi.yaml`](backend/internal/httpapi/
 
 | Rule | Where it's enforced | Test |
 |---|---|---|
-| A posted movement is never edited or deleted. Mistakes are undone with a reversal, and a movement can only be reversed once. | `ledger/reverse.go` `Reverse`, plus a unique constraint on `reversal_of_id` | `TestReversal`, `TestEdge_ConcurrentReversalsOfTheSameMovement` |
+| A posted movement is never edited or deleted. Mistakes are undone with a reversal, and a movement can only be reversed once. Only the latest movement of a product can be reversed. | `ledger/reverse.go` `Reverse`, plus a unique constraint on `reversal_of_id` | `TestReversal`, `TestReversal_OnlyLatestMovementOfProduct`, `TestEdge_ConcurrentReversalsOfTheSameMovement` |
 | Balances come from the ledger. The cached totals can be checked against it at any time. | `ledger/save.go` `saveMovement`, `ListReconciliation` in `db/queries/reports.sql` | `TestReconcile_DetectsCorruptedCache` |
 | Stock can't go negative, even when two people ship the last unit at the same time. | `ledger/save.go` `lockProduct` and `takeStock` | `TestEdge_TwoOutsRacingForTheLastUnit` |
 | A transfer moves stock out of one bin and into another, or does nothing at all. | `ledger/transfer.go` `Transfer` | `TestTransfer_DestinationFailureRollsBackEverything` |
@@ -330,7 +330,7 @@ Assumptions:
 3. If stock is at zero, the cost of the next incoming stock becomes the new average. If stock drops to zero, the last average is kept.
 4. Only incoming stock, and reversing incoming stock, change the average cost. Everything else is valued at the current average.
 5. A reversal can't be reversed. To undo one, post a new movement.
-6. Incoming stock can't be reversed once it has been shipped, since removing it would leave a negative stock value.
+6. Only the latest movement of a product can be reversed. Older mistakes are undone newest first, or corrected with an adjustment. Otherwise a later shipment could depend on stock the reversal removes.
 7. A shipment that one bin can't cover is picked from several bins but recorded as one movement.
 8. Every unit takes one unit of bin space, whether it's a piece, a kilogram or a litre.
 9. There is no login.

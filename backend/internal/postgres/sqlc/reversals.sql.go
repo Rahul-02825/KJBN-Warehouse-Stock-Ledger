@@ -62,6 +62,23 @@ func (q *Queries) GetEntriesForReversal(ctx context.Context, movementID int64) (
 	return items, nil
 }
 
+const getLatestActiveMovementID = `-- name: GetLatestActiveMovementID :one
+SELECT m.id
+FROM movements m
+WHERE m.product_id = $1
+  AND m.movement_type <> 'REVERSAL'
+  AND NOT EXISTS (SELECT 1 FROM movements r WHERE r.reversal_of_id = m.id)
+ORDER BY m.id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestActiveMovementID(ctx context.Context, productID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, getLatestActiveMovementID, productID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getReversalForMovement = `-- name: GetReversalForMovement :one
 SELECT id, product_id, movement_type, from_location_id, to_location_id, quantity, unit_cost, reference, reason, note, created_by, reversal_of_id, created_at, idempotency_key
 FROM movements
